@@ -4,296 +4,193 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ThreatLens — Web Vulnerability Scanner</title>
-  <meta name="description" content="ThreatLens: Instantly scan any website for technology fingerprints, HTTP headers, and known CVE vulnerabilities. Generate downloadable PDF security reports." />
+  <meta name="description" content="ThreatLens: Scan any website for technology fingerprints, HTTP headers, and known CVE vulnerabilities." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Space+Grotesk:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg:         #060b14;
-      --surface:    #0d1626;
-      --surface2:   #111e35;
-      --border:     rgba(14, 165, 233, 0.12);
-      --border2:    rgba(255,255,255,0.06);
-      --accent:     #0ea5e9;
-      --accent2:    #38bdf8;
-      --accent-dim: rgba(14, 165, 233, 0.15);
-      --text:       #e2e8f0;
-      --text-muted: #64748b;
-      --text-dim:   #94a3b8;
-      --green:      #22c55e;
-      --yellow:     #f59e0b;
-      --red:        #ef4444;
-      --red2:       #dc2626;
-      --critical:   #c026d3;
-      --radius:     14px;
-      --glow:       0 0 40px rgba(14,165,233,0.18);
+      --bg:        #0f0e0d;
+      --surface:   #181614;
+      --border:    rgba(240, 236, 228, 0.09);
+      --border2:   rgba(240, 236, 228, 0.05);
+      --cream:     #ede9e0;
+      --muted:     #7a7369;
+      --dim:       #4e4a44;
+      --amber:     #c9793a;
+      --amber-dim: rgba(201, 121, 58, 0.12);
+      --red:       #b85c4a;
+      --yellow:    #b89550;
+      --green:     #5a8f6a;
+      --radius:    6px;
     }
 
     html { scroll-behavior: smooth; }
 
     body {
-      font-family: 'Inter', sans-serif;
+      font-family: 'Space Grotesk', sans-serif;
       background: var(--bg);
-      color: var(--text);
+      color: var(--cream);
       min-height: 100vh;
-      overflow-x: hidden;
+      font-size: 15px;
+      line-height: 1.6;
     }
 
-    /* ─── Background mesh ─── */
-    body::before {
-      content: '';
-      position: fixed;
-      inset: 0;
-      background:
-        radial-gradient(ellipse 80% 50% at 10% 10%, rgba(14,165,233,0.07) 0%, transparent 60%),
-        radial-gradient(ellipse 60% 40% at 90% 80%, rgba(56,189,248,0.05) 0%, transparent 50%),
-        radial-gradient(ellipse 40% 30% at 50% 50%, rgba(14,165,233,0.03) 0%, transparent 60%);
-      pointer-events: none;
-      z-index: 0;
-    }
+    /* ── Layout ── */
+    .page { max-width: 780px; margin: 0 auto; padding: 0 2rem; }
 
-    /* ─── Grid overlay ─── */
-    body::after {
-      content: '';
-      position: fixed;
-      inset: 0;
-      background-image:
-        linear-gradient(rgba(14,165,233,0.03) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(14,165,233,0.03) 1px, transparent 1px);
-      background-size: 60px 60px;
-      pointer-events: none;
-      z-index: 0;
-    }
-
-    .wrapper { position: relative; z-index: 1; }
-
-    /* ─── NAV ─── */
+    /* ── Nav ── */
     nav {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 1.2rem 3rem;
-      border-bottom: 1px solid var(--border2);
-      backdrop-filter: blur(16px);
-      background: rgba(6, 11, 20, 0.7);
-      position: sticky;
-      top: 0;
-      z-index: 100;
+      border-bottom: 1px solid var(--border);
+      padding: 1.4rem 0;
+      margin-bottom: 5rem;
     }
 
-    .logo {
+    nav .page {
+      display: flex;
+      align-items: baseline;
+      gap: 1rem;
+    }
+
+    .wordmark {
+      font-family: 'DM Serif Display', serif;
+      font-size: 1.15rem;
+      color: var(--cream);
+      letter-spacing: 0.01em;
+    }
+
+    .wordmark em {
+      font-style: italic;
+      color: var(--amber);
+    }
+
+    .nav-tag {
+      font-size: 0.7rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--dim);
+      font-weight: 500;
+    }
+
+    /* ── Hero ── */
+    .hero {
+      margin-bottom: 3.5rem;
+    }
+
+    .eyebrow {
+      font-size: 0.72rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--amber);
+      font-weight: 500;
+      margin-bottom: 1.2rem;
       display: flex;
       align-items: center;
       gap: 0.6rem;
-      font-size: 1.3rem;
-      font-weight: 800;
-      letter-spacing: -0.02em;
-      color: var(--text);
-      text-decoration: none;
     }
 
-    .logo-icon {
-      width: 34px;
-      height: 34px;
-      background: linear-gradient(135deg, var(--accent), var(--accent2));
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1rem;
-      box-shadow: 0 0 18px rgba(14,165,233,0.4);
-    }
-
-    .logo span { color: var(--accent); }
-
-    .nav-badge {
-      font-size: 0.7rem;
-      font-weight: 600;
-      color: var(--accent);
-      background: var(--accent-dim);
-      border: 1px solid var(--border);
-      padding: 0.2rem 0.6rem;
-      border-radius: 999px;
-      letter-spacing: 0.05em;
-      text-transform: uppercase;
-    }
-
-    /* ─── HERO ─── */
-    .hero {
-      text-align: center;
-      padding: 5rem 2rem 3rem;
-      max-width: 860px;
-      margin: 0 auto;
-    }
-
-    .hero-eyebrow {
-      display: inline-flex;
-      align-items: center;
-      gap: 0.5rem;
-      font-size: 0.78rem;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.12em;
-      color: var(--accent);
-      background: var(--accent-dim);
-      border: 1px solid var(--border);
-      padding: 0.4rem 1rem;
-      border-radius: 999px;
-      margin-bottom: 1.8rem;
-    }
-
-    .hero-eyebrow::before {
+    .eyebrow::before {
       content: '';
-      width: 6px; height: 6px;
-      background: var(--accent);
-      border-radius: 50%;
-      box-shadow: 0 0 8px var(--accent);
-      animation: pulse 2s infinite;
-    }
-
-    @keyframes pulse {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50%       { opacity: 0.5; transform: scale(1.4); }
+      display: inline-block;
+      width: 18px;
+      height: 1px;
+      background: var(--amber);
     }
 
     .hero h1 {
-      font-size: clamp(2.4rem, 6vw, 4rem);
-      font-weight: 900;
-      line-height: 1.1;
-      letter-spacing: -0.04em;
-      margin-bottom: 1.2rem;
-      background: linear-gradient(135deg, #ffffff 0%, var(--accent2) 60%, var(--accent) 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
+      font-family: 'DM Serif Display', serif;
+      font-size: clamp(2.4rem, 5vw, 3.6rem);
+      line-height: 1.08;
+      letter-spacing: -0.01em;
+      color: var(--cream);
+      margin-bottom: 1.1rem;
+      font-weight: 400;
+    }
+
+    .hero h1 em {
+      font-style: italic;
+      color: var(--amber);
     }
 
     .hero p {
-      font-size: 1.08rem;
-      color: var(--text-dim);
-      line-height: 1.7;
-      max-width: 600px;
-      margin: 0 auto 2.5rem;
+      color: var(--muted);
+      font-size: 0.95rem;
+      max-width: 520px;
+      line-height: 1.75;
+      font-weight: 300;
     }
 
-    /* ─── SCAN CARD ─── */
-    .scan-card {
-      background: var(--surface);
+    /* ── Scan box ── */
+    .scan-box {
       border: 1px solid var(--border);
       border-radius: var(--radius);
-      padding: 2rem;
-      max-width: 760px;
-      margin: 0 auto 3rem;
-      box-shadow: var(--glow), 0 24px 80px rgba(0,0,0,0.5);
-      position: relative;
-      overflow: hidden;
-    }
-
-    .scan-card::before {
-      content: '';
-      position: absolute;
-      top: 0; left: 0; right: 0;
-      height: 2px;
-      background: linear-gradient(90deg, transparent, var(--accent), var(--accent2), transparent);
+      background: var(--surface);
+      padding: 1.5rem;
+      margin-bottom: 1rem;
     }
 
     .input-row {
       display: flex;
-      gap: 0.75rem;
-      align-items: stretch;
-    }
-
-    .url-input-wrap {
-      flex: 1;
-      position: relative;
-    }
-
-    .url-icon {
-      position: absolute;
-      left: 1rem;
-      top: 50%;
-      transform: translateY(-50%);
-      color: var(--text-muted);
-      font-size: 1rem;
-      pointer-events: none;
-      transition: color 0.2s;
+      gap: 0.6rem;
     }
 
     #urlInput {
-      width: 100%;
-      height: 52px;
-      background: var(--surface2);
-      border: 1px solid var(--border2);
-      border-radius: 10px;
-      padding: 0 1rem 0 2.8rem;
-      font-size: 0.95rem;
-      color: var(--text);
+      flex: 1;
+      height: 46px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 0 1rem;
+      font-size: 0.88rem;
       font-family: 'JetBrains Mono', monospace;
+      color: var(--cream);
       outline: none;
-      transition: border-color 0.2s, box-shadow 0.2s;
+      transition: border-color 0.15s;
     }
 
-    #urlInput::placeholder { color: var(--text-muted); font-family: 'Inter', sans-serif; }
+    #urlInput::placeholder { color: var(--dim); }
 
     #urlInput:focus {
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px rgba(14,165,233,0.15);
-    }
-
-    #urlInput:focus + .url-icon, .url-input-wrap:focus-within .url-icon {
-      color: var(--accent);
+      border-color: var(--amber);
     }
 
     .btn-scan {
-      height: 52px;
-      padding: 0 1.8rem;
-      background: linear-gradient(135deg, var(--accent), var(--accent2));
-      color: #fff;
+      height: 46px;
+      padding: 0 1.4rem;
+      background: var(--amber);
+      color: #0f0e0d;
       border: none;
-      border-radius: 10px;
-      font-size: 0.92rem;
-      font-weight: 700;
-      font-family: 'Inter', sans-serif;
+      border-radius: var(--radius);
+      font-size: 0.82rem;
+      font-weight: 600;
+      font-family: 'Space Grotesk', sans-serif;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
       cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      letter-spacing: 0.01em;
-      transition: transform 0.15s, box-shadow 0.2s, opacity 0.2s;
       white-space: nowrap;
-      box-shadow: 0 4px 20px rgba(14,165,233,0.3);
+      transition: opacity 0.15s;
     }
 
-    .btn-scan:hover:not(:disabled) {
-      transform: translateY(-1px);
-      box-shadow: 0 8px 28px rgba(14,165,233,0.45);
-    }
-
-    .btn-scan:active:not(:disabled) { transform: translateY(0); }
-
-    .btn-scan:disabled { opacity: 0.55; cursor: not-allowed; }
+    .btn-scan:hover:not(:disabled) { opacity: 0.88; }
+    .btn-scan:disabled { opacity: 0.4; cursor: not-allowed; }
 
     .scan-hint {
-      margin-top: 0.85rem;
-      font-size: 0.78rem;
-      color: var(--text-muted);
-      display: flex;
-      align-items: center;
-      gap: 0.4rem;
+      margin-top: 0.75rem;
+      font-size: 0.75rem;
+      color: var(--dim);
     }
 
-    /* ─── PROGRESS / STATUS ─── */
+    /* ── Status ── */
     #statusBar {
       display: none;
-      margin-top: 1.2rem;
+      margin-top: 1rem;
     }
 
     .status-label {
-      font-size: 0.82rem;
-      color: var(--text-muted);
+      font-size: 0.78rem;
+      color: var(--muted);
       margin-bottom: 0.5rem;
       display: flex;
       align-items: center;
@@ -301,411 +198,399 @@
     }
 
     .spinner {
-      width: 14px; height: 14px;
-      border: 2px solid var(--border2);
-      border-top-color: var(--accent);
+      width: 12px; height: 12px;
+      border: 1.5px solid var(--border);
+      border-top-color: var(--amber);
       border-radius: 50%;
-      animation: spin 0.8s linear infinite;
+      animation: spin 0.7s linear infinite;
+      flex-shrink: 0;
     }
 
     @keyframes spin { to { transform: rotate(360deg); } }
 
     .progress-track {
-      height: 4px;
-      background: var(--surface2);
+      height: 2px;
+      background: var(--border2);
       border-radius: 999px;
       overflow: hidden;
     }
 
     .progress-bar {
       height: 100%;
-      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      background: var(--amber);
       border-radius: 999px;
       width: 0%;
       transition: width 0.4s ease;
-      animation: shimmer 1.5s ease infinite;
-      background-size: 200% 100%;
     }
 
-    @keyframes shimmer {
-      0%   { background-position: 200% 0; }
-      100% { background-position: -200% 0; }
-    }
-
-    /* ─── ERROR BANNER ─── */
+    /* ── Error ── */
     #errorBanner {
       display: none;
-      background: rgba(239,68,68,0.1);
-      border: 1px solid rgba(239,68,68,0.3);
-      border-radius: 10px;
-      padding: 0.9rem 1.2rem;
-      font-size: 0.88rem;
-      color: #fca5a5;
-      margin-top: 1rem;
-      display: none;
-      align-items: center;
-      gap: 0.6rem;
+      margin-top: 0.75rem;
+      padding: 0.7rem 1rem;
+      background: rgba(184, 92, 74, 0.1);
+      border: 1px solid rgba(184, 92, 74, 0.25);
+      border-radius: var(--radius);
+      font-size: 0.82rem;
+      color: #c97c6a;
+      align-items: flex-start;
+      gap: 0.5rem;
+      line-height: 1.5;
     }
 
-    /* ─── RESULTS ─── */
+    /* ── Results ── */
     #results {
-      max-width: 960px;
-      margin: 0 auto 4rem;
-      padding: 0 1.5rem;
       display: none;
+      margin-bottom: 5rem;
     }
 
-    .results-header {
+    /* ── Section heading ── */
+    .section-head {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 0.6rem;
+      margin-bottom: 1.2rem;
+      margin-top: 2.5rem;
+    }
+
+    .section-title {
+      font-family: 'DM Serif Display', serif;
+      font-size: 1.1rem;
+      font-weight: 400;
+      color: var(--cream);
+    }
+
+    .section-meta {
+      font-size: 0.72rem;
+      color: var(--dim);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ── Stats strip ── */
+    .stats-strip {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      margin-bottom: 2.5rem;
+    }
+
+    @media (max-width: 520px) { .stats-strip { grid-template-columns: repeat(2, 1fr); } }
+
+    .stat-cell {
+      background: var(--surface);
+      padding: 1rem 1.2rem;
+    }
+
+    .stat-label {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--dim);
+      font-weight: 500;
+      margin-bottom: 0.3rem;
+    }
+
+    .stat-num {
+      font-family: 'DM Serif Display', serif;
+      font-size: 2rem;
+      line-height: 1;
+      color: var(--cream);
+    }
+
+    .stat-num.danger { color: var(--red); }
+    .stat-num.warn   { color: var(--yellow); }
+    .stat-num.ok     { color: var(--green); }
+    .stat-num.accent { color: var(--amber); }
+
+    /* ── Results header ── */
+    .results-bar {
       display: flex;
       align-items: center;
       justify-content: space-between;
       margin-bottom: 1.5rem;
       flex-wrap: wrap;
-      gap: 1rem;
+      gap: 0.75rem;
     }
 
-    .results-title {
-      font-size: 1.1rem;
-      font-weight: 700;
-      color: var(--text);
-    }
-
-    .results-meta {
-      font-size: 0.8rem;
-      color: var(--text-muted);
+    .results-target {
       font-family: 'JetBrains Mono', monospace;
+      font-size: 0.8rem;
+      color: var(--muted);
     }
 
     .btn-download {
       display: inline-flex;
       align-items: center;
-      gap: 0.5rem;
-      padding: 0.6rem 1.3rem;
-      background: linear-gradient(135deg, #22c55e, #16a34a);
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      font-size: 0.85rem;
-      font-weight: 600;
-      font-family: 'Inter', sans-serif;
+      gap: 0.45rem;
+      padding: 0.45rem 1rem;
+      background: transparent;
+      color: var(--green);
+      border: 1px solid rgba(90, 143, 106, 0.35);
+      border-radius: var(--radius);
+      font-size: 0.78rem;
+      font-weight: 500;
+      font-family: 'Space Grotesk', sans-serif;
+      letter-spacing: 0.03em;
       cursor: pointer;
-      transition: transform 0.15s, box-shadow 0.2s;
-      box-shadow: 0 4px 16px rgba(34,197,94,0.3);
+      transition: background 0.15s, border-color 0.15s;
     }
 
-    .btn-download:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(34,197,94,0.4); }
-    .btn-download:disabled { opacity: 0.55; cursor: not-allowed; }
+    .btn-download:hover { background: rgba(90, 143, 106, 0.08); border-color: rgba(90, 143, 106, 0.6); }
+    .btn-download:disabled { opacity: 0.4; cursor: not-allowed; }
 
-    /* ─── SECTIONS ─── */
-    .section-grid {
+    /* ── Two col grid ── */
+    .two-col {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 1.2rem;
-      margin-bottom: 1.2rem;
-    }
-
-    @media (max-width: 700px) { .section-grid { grid-template-columns: 1fr; } }
-
-    .panel {
-      background: var(--surface);
-      border: 1px solid var(--border2);
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
       border-radius: var(--radius);
       overflow: hidden;
+      margin-bottom: 1.5rem;
     }
 
-    .panel-header {
-      display: flex;
-      align-items: center;
-      gap: 0.6rem;
-      padding: 0.9rem 1.2rem;
-      border-bottom: 1px solid var(--border2);
-      background: var(--surface2);
+    @media (max-width: 600px) { .two-col { grid-template-columns: 1fr; } }
+
+    .col-block {
+      background: var(--surface);
+      padding: 1.2rem;
     }
 
-    .panel-icon {
-      width: 28px; height: 28px;
-      border-radius: 7px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 0.9rem;
-      flex-shrink: 0;
+    .col-title {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--dim);
+      font-weight: 500;
+      margin-bottom: 0.9rem;
     }
 
-    .panel-title {
-      font-size: 0.85rem;
-      font-weight: 700;
-      color: var(--text);
-      letter-spacing: 0.01em;
-    }
-
-    .panel-count {
-      margin-left: auto;
-      font-size: 0.72rem;
-      font-weight: 600;
-      color: var(--accent);
-      background: var(--accent-dim);
-      border: 1px solid var(--border);
-      padding: 0.15rem 0.55rem;
-      border-radius: 999px;
-    }
-
-    .panel-body { padding: 1rem 1.2rem; }
-
-    /* Tech stack chips */
-    .tech-chips { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+    /* ── Tech chips ── */
+    .tech-chips { display: flex; flex-wrap: wrap; gap: 0.45rem; }
 
     .tech-chip {
       display: inline-flex;
       align-items: center;
-      gap: 0.4rem;
-      font-size: 0.78rem;
-      font-weight: 500;
-      background: var(--surface2);
-      border: 1px solid var(--border2);
-      border-radius: 6px;
-      padding: 0.35rem 0.7rem;
-      color: var(--text-dim);
-      transition: border-color 0.2s, color 0.2s;
+      gap: 0.35rem;
+      font-size: 0.76rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      padding: 0.25rem 0.6rem;
+      color: var(--cream);
     }
 
-    .tech-chip:hover { border-color: var(--accent); color: var(--accent); }
-
-    .tech-chip .chip-ver {
+    .chip-ver {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 0.7rem;
-      color: var(--accent);
+      font-size: 0.68rem;
+      color: var(--amber);
     }
 
-    /* Headers list */
-    .header-list { display: flex; flex-direction: column; gap: 0.4rem; }
+    /* ── Headers ── */
+    .header-list { display: flex; flex-direction: column; }
 
     .header-row {
       display: flex;
-      gap: 0.5rem;
-      font-size: 0.78rem;
-      line-height: 1.4;
+      gap: 0.75rem;
+      font-size: 0.75rem;
       padding: 0.35rem 0;
       border-bottom: 1px solid var(--border2);
+      line-height: 1.45;
     }
 
     .header-row:last-child { border-bottom: none; }
 
     .header-key {
       font-family: 'JetBrains Mono', monospace;
-      color: var(--accent2);
-      min-width: 180px;
+      color: var(--amber);
+      min-width: 150px;
       flex-shrink: 0;
       word-break: break-all;
     }
 
     .header-val {
-      color: var(--text-muted);
+      color: var(--muted);
       word-break: break-all;
     }
 
-    /* ─── CVE PANEL ─── */
+    /* ── CVE section ── */
+    .vuln-header {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      margin-bottom: 0.75rem;
+    }
+
+    .vuln-title {
+      font-family: 'DM Serif Display', serif;
+      font-size: 1.1rem;
+      font-weight: 400;
+      color: var(--cream);
+    }
+
+    .vuln-count {
+      font-size: 0.72rem;
+      color: var(--dim);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
     .cve-panel {
-      background: var(--surface);
-      border: 1px solid var(--border2);
+      border: 1px solid var(--border);
       border-radius: var(--radius);
       overflow: hidden;
-      margin-bottom: 1.2rem;
+      margin-bottom: 0.5rem;
+      background: var(--surface);
     }
 
     .cve-panel-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0.9rem 1.2rem;
-      border-bottom: 1px solid var(--border2);
-      background: var(--surface2);
+      padding: 0.8rem 1rem;
       cursor: pointer;
       user-select: none;
-      transition: background 0.15s;
+      gap: 0.75rem;
     }
 
-    .cve-panel-header:hover { background: rgba(17, 30, 53, 0.8); }
+    .cve-panel-header:hover { background: rgba(240, 236, 228, 0.02); }
 
     .cve-key-label {
-      font-size: 0.88rem;
-      font-weight: 700;
-      color: var(--text);
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--cream);
       display: flex;
       align-items: center;
       gap: 0.6rem;
+      flex-wrap: wrap;
     }
 
-    .cve-key-label::before {
-      content: '';
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      background: var(--accent);
-      box-shadow: 0 0 6px var(--accent);
+    .cve-key-label span { color: var(--muted); font-weight: 400; font-size: 0.75rem; }
+
+    .cve-toggle {
+      color: var(--dim);
+      font-size: 0.65rem;
+      transition: transform 0.2s;
       flex-shrink: 0;
     }
 
-    .cve-toggle { color: var(--text-muted); transition: transform 0.25s; font-size: 0.8rem; }
     .cve-toggle.open { transform: rotate(180deg); }
 
-    .cve-body { padding: 0.8rem 1.2rem; display: flex; flex-direction: column; gap: 0.7rem; }
-
-    .cve-card {
-      background: var(--surface2);
-      border: 1px solid var(--border2);
-      border-radius: 10px;
-      padding: 0.9rem 1rem;
-      transition: border-color 0.2s;
+    .cve-body {
+      padding: 0 1rem 0.8rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      border-top: 1px solid var(--border2);
     }
 
-    .cve-card:hover { border-color: var(--border); }
+    .cve-card {
+      padding: 0.75rem;
+      border: 1px solid var(--border2);
+      border-radius: 4px;
+      margin-top: 0.5rem;
+    }
 
     .cve-card-header {
       display: flex;
       align-items: center;
-      gap: 0.7rem;
-      margin-bottom: 0.5rem;
+      gap: 0.6rem;
+      margin-bottom: 0.4rem;
       flex-wrap: wrap;
     }
 
     .cve-id {
       font-family: 'JetBrains Mono', monospace;
-      font-size: 0.82rem;
-      font-weight: 600;
-      color: var(--accent2);
+      font-size: 0.78rem;
+      color: var(--amber);
+      font-weight: 500;
     }
 
     .sev-badge {
-      font-size: 0.65rem;
-      font-weight: 700;
+      font-size: 0.62rem;
+      font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.08em;
-      padding: 0.18rem 0.55rem;
-      border-radius: 4px;
+      letter-spacing: 0.07em;
+      padding: 0.15rem 0.45rem;
+      border-radius: 3px;
     }
 
-    .sev-CRITICAL { background: rgba(192,38,211,0.2); color: #e879f9; border: 1px solid rgba(192,38,211,0.4); }
-    .sev-HIGH     { background: rgba(239,68,68,0.15);  color: #fca5a5; border: 1px solid rgba(239,68,68,0.3); }
-    .sev-MEDIUM   { background: rgba(245,158,11,0.15); color: #fcd34d; border: 1px solid rgba(245,158,11,0.3); }
-    .sev-LOW      { background: rgba(34,197,94,0.15);  color: #86efac; border: 1px solid rgba(34,197,94,0.3); }
-    .sev-UNKNOWN  { background: rgba(100,116,139,0.2); color: #94a3b8; border: 1px solid rgba(100,116,139,0.3); }
+    .sev-CRITICAL { background: rgba(180, 60, 180, 0.15); color: #c97ae0; border: 1px solid rgba(180,60,180,0.3); }
+    .sev-HIGH     { background: rgba(184, 92, 74, 0.15);  color: #c97c6a; border: 1px solid rgba(184,92,74,0.3); }
+    .sev-MEDIUM   { background: rgba(184, 149, 80, 0.15); color: #c9a45a; border: 1px solid rgba(184,149,80,0.3); }
+    .sev-LOW      { background: rgba(90, 143, 106, 0.15); color: #7aaf8a; border: 1px solid rgba(90,143,106,0.3); }
+    .sev-UNKNOWN  { background: rgba(100,100,100,0.12);   color: var(--muted); border: 1px solid var(--border); }
 
     .cve-score {
       margin-left: auto;
-      font-size: 0.78rem;
-      font-weight: 700;
-      color: var(--text-dim);
+      font-size: 0.73rem;
+      color: var(--dim);
       font-family: 'JetBrains Mono', monospace;
     }
 
     .cve-desc {
-      font-size: 0.8rem;
-      color: var(--text-muted);
-      line-height: 1.55;
+      font-size: 0.78rem;
+      color: var(--muted);
+      line-height: 1.6;
     }
 
-    /* ─── EMPTY STATE ─── */
+    /* ── Empty ── */
     .empty-state {
       text-align: center;
-      padding: 2.5rem 1rem;
-      color: var(--text-muted);
-      font-size: 0.85rem;
+      padding: 2rem 1rem;
+      color: var(--dim);
+      font-size: 0.82rem;
     }
 
-    .empty-icon { font-size: 2rem; margin-bottom: 0.5rem; opacity: 0.4; }
-
-    /* ─── STATS ROW ─── */
-    .stats-row {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 1rem;
-      margin-bottom: 1.5rem;
-    }
-
-    @media (max-width: 600px) { .stats-row { grid-template-columns: repeat(2, 1fr); } }
-
-    .stat-card {
-      background: var(--surface);
-      border: 1px solid var(--border2);
-      border-radius: var(--radius);
-      padding: 1rem 1.2rem;
-      display: flex;
-      flex-direction: column;
-      gap: 0.3rem;
-    }
-
-    .stat-label {
-      font-size: 0.72rem;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: var(--text-muted);
-      font-weight: 600;
-    }
-
-    .stat-value {
-      font-size: 1.7rem;
-      font-weight: 800;
-      color: var(--text);
-      line-height: 1;
-    }
-
-    .stat-value.red    { color: var(--red); }
-    .stat-value.yellow { color: var(--yellow); }
-    .stat-value.green  { color: var(--green); }
-    .stat-value.blue   { color: var(--accent); }
-
-    /* ─── FOOTER ─── */
+    /* ── Footer ── */
     footer {
+      border-top: 1px solid var(--border);
+      padding: 1.5rem 0;
       text-align: center;
-      padding: 2rem;
-      color: var(--text-muted);
-      font-size: 0.78rem;
-      border-top: 1px solid var(--border2);
+      font-size: 0.72rem;
+      color: var(--dim);
+      margin-top: 4rem;
     }
 
-    footer a { color: var(--accent); text-decoration: none; }
+    footer a { color: var(--muted); text-decoration: none; }
+    footer a:hover { color: var(--cream); }
 
-    /* ─── ANIMATIONS ─── */
-    @keyframes fadeUp {
-      from { opacity: 0; transform: translateY(16px); }
-      to   { opacity: 1; transform: translateY(0); }
-    }
-
-    .fade-up { animation: fadeUp 0.45s ease both; }
-
-    .fade-up-1 { animation-delay: 0.05s; }
-    .fade-up-2 { animation-delay: 0.12s; }
-    .fade-up-3 { animation-delay: 0.2s; }
-
-    /* Scrollbar */
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: var(--surface); }
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
     ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
+
+    .headers-scroll { max-height: 300px; overflow-y: auto; }
   </style>
 </head>
 <body>
-<div class="wrapper">
 
   <!-- NAV -->
   <nav>
-    <a class="logo" href="#">
-      <div class="logo-icon">🔍</div>
-      Threat<span>Lens</span>
-    </a>
-    <div class="nav-badge">v1.0 · Beta</div>
+    <div class="page">
+      <span class="wordmark">Threat<em>Lens</em></span>
+      <span class="nav-tag">Vulnerability Intelligence</span>
+    </div>
   </nav>
 
-  <!-- HERO -->
-  <section class="hero fade-up">
-    <div class="hero-eyebrow">Live Vulnerability Scanner</div>
-    <h1>Know What's<br/>Hiding in Your Stack</h1>
-    <p>Enter any URL and ThreatLens will fingerprint the technology, analyze HTTP headers, and surface real-time CVE vulnerabilities — in seconds.</p>
-  </section>
+  <div class="page">
 
-  <!-- SCAN CARD -->
-  <div class="scan-card fade-up fade-up-2">
-    <div class="input-row">
-      <div class="url-input-wrap">
+    <!-- HERO -->
+    <section class="hero">
+      <div class="eyebrow">Security Scanner</div>
+      <h1>Surface what's<br/><em>hiding</em> in your stack.</h1>
+      <p>Enter any URL to fingerprint the technology, inspect HTTP headers, and surface real CVE vulnerabilities from the NVD database.</p>
+    </section>
+
+    <!-- SCAN BOX -->
+    <div class="scan-box">
+      <div class="input-row">
         <input
           type="text"
           id="urlInput"
@@ -713,94 +598,70 @@
           autocomplete="off"
           spellcheck="false"
         />
-        <span class="url-icon">🌐</span>
+        <button class="btn-scan" id="scanBtn" onclick="startScan()">Scan</button>
       </div>
-      <button class="btn-scan" id="scanBtn" onclick="startScan()">
-        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-        Scan
-      </button>
-    </div>
+      <div class="scan-hint">Include http:// or https:// — results show tech stack, headers &amp; CVEs.</div>
 
-    <div class="scan-hint">
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg>
-      Use http:// or https://. Results include tech stack, headers &amp; CVEs.
-    </div>
-
-    <!-- Progress -->
-    <div id="statusBar">
-      <div class="status-label">
-        <div class="spinner" id="spinner"></div>
-        <span id="statusText">Initializing scan…</span>
-      </div>
-      <div class="progress-track">
-        <div class="progress-bar" id="progressBar"></div>
-      </div>
-    </div>
-
-    <!-- Error -->
-    <div id="errorBanner">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6m0-6 6 6"/></svg>
-      <span id="errorText">Something went wrong.</span>
-    </div>
-  </div>
-
-  <!-- RESULTS -->
-  <div id="results">
-
-    <!-- Results Header -->
-    <div class="results-header fade-up">
-      <div>
-        <div class="results-title">Scan Report</div>
-        <div class="results-meta" id="resultsMeta"></div>
-      </div>
-      <button class="btn-download" id="downloadBtn" onclick="downloadReport()">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-        Download PDF
-      </button>
-    </div>
-
-    <!-- Stats -->
-    <div class="stats-row fade-up fade-up-1" id="statsRow"></div>
-
-    <!-- Tech + Headers -->
-    <div class="section-grid fade-up fade-up-2">
-      <div class="panel">
-        <div class="panel-header">
-          <div class="panel-icon" style="background:rgba(14,165,233,0.15);">🖥️</div>
-          <div class="panel-title">Technology Stack</div>
-          <div class="panel-count" id="techCount">0</div>
+      <!-- Progress -->
+      <div id="statusBar">
+        <div class="status-label" style="margin-top:0.9rem;">
+          <div class="spinner"></div>
+          <span id="statusText">Initializing scan…</span>
         </div>
-        <div class="panel-body" id="techBody"></div>
+        <div class="progress-track">
+          <div class="progress-bar" id="progressBar"></div>
+        </div>
       </div>
 
-      <div class="panel">
-        <div class="panel-header">
-          <div class="panel-icon" style="background:rgba(99,102,241,0.15);">📋</div>
-          <div class="panel-title">HTTP Headers</div>
-          <div class="panel-count" id="headerCount">0</div>
-        </div>
-        <div class="panel-body" id="headersBody" style="max-height:320px;overflow-y:auto;"></div>
+      <!-- Error -->
+      <div id="errorBanner">
+        <span id="errorText">Something went wrong.</span>
       </div>
     </div>
 
-    <!-- Vulnerabilities -->
-    <div class="fade-up fade-up-3">
-      <div style="display:flex;align-items:center;gap:0.7rem;margin-bottom:1rem;">
-        <div style="font-size:0.9rem;font-weight:700;color:var(--text);">CVE Vulnerabilities</div>
-        <div style="flex:1;height:1px;background:var(--border2);"></div>
-        <div style="font-size:0.75rem;color:var(--text-muted);" id="vulnSummary"></div>
+    <!-- RESULTS -->
+    <div id="results">
+
+      <!-- Meta + Download -->
+      <div class="results-bar">
+        <span class="results-target" id="resultsMeta"></span>
+        <button class="btn-download" id="downloadBtn" onclick="downloadReport()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Download PDF
+        </button>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-strip" id="statsRow"></div>
+
+      <!-- Tech + Headers -->
+      <div class="two-col">
+        <div class="col-block">
+          <div class="col-title">Technology Stack <span id="techCount" style="color:var(--amber);margin-left:0.3rem;"></span></div>
+          <div id="techBody"></div>
+        </div>
+        <div class="col-block">
+          <div class="col-title">HTTP Headers <span id="headerCount" style="color:var(--amber);margin-left:0.3rem;"></span></div>
+          <div id="headersBody" class="headers-scroll"></div>
+        </div>
+      </div>
+
+      <!-- CVE Vulnerabilities -->
+      <div class="vuln-header">
+        <div class="vuln-title">CVE Vulnerabilities</div>
+        <div class="vuln-count" id="vulnSummary"></div>
       </div>
       <div id="vulnBody"></div>
+
     </div>
 
-  </div>
+    <!-- FOOTER -->
+    <footer>
+      ThreatLens &mdash; For authorized security assessment only &middot;
+      Powered by <a href="https://nvd.nist.gov/" target="_blank">NVD</a>
+    </footer>
 
-  <!-- FOOTER -->
-  <footer>
-    ThreatLens &mdash; For authorized security assessment only &middot;
-    Powered by <a href="https://nvd.nist.gov/" target="_blank">NVD</a> &amp; WhatWeb
-  </footer>
-</div>
+  </div>
 
 <script>
   const API_BASE = '';
@@ -841,8 +702,6 @@
     setProgress(10, 'Connecting to target…');
     lastScannedUrl = url;
 
-    // Animate progress while waiting
-    let pct = 10;
     const steps = [
       { delay: 600,  pct: 28, text: 'Fingerprinting technology stack…' },
       { delay: 1400, pct: 50, text: 'Fetching HTTP headers…' },
@@ -875,7 +734,7 @@
       timers.forEach(clearTimeout);
       $('statusBar').style.display = 'none';
       $('scanBtn').disabled = false;
-      showError('Scan failed: ' + err.message + '. Is the backend running on port 8000?');
+      showError('Scan failed: ' + err.message);
     }
   }
 
@@ -884,10 +743,8 @@
     const headers = data.headers || {};
     const vulns = data.vulnerabilities || {};
 
-    // Meta
-    $('resultsMeta').textContent = `Target: ${url} · ${new Date().toLocaleString()}`;
+    $('resultsMeta').textContent = `${url} · ${new Date().toLocaleString()}`;
 
-    // Stats
     const techStack = tech.tech_stack || {};
     const techCount = Object.keys(techStack).length;
     const headerCount = Object.keys(headers).length;
@@ -905,26 +762,26 @@
     }
 
     $('statsRow').innerHTML = `
-      <div class="stat-card">
+      <div class="stat-cell">
         <div class="stat-label">Tech Detected</div>
-        <div class="stat-value blue">${techCount}</div>
+        <div class="stat-num accent">${techCount}</div>
       </div>
-      <div class="stat-card">
+      <div class="stat-cell">
         <div class="stat-label">Total CVEs</div>
-        <div class="stat-value ${totalCVEs > 0 ? 'red' : 'green'}">${totalCVEs}</div>
+        <div class="stat-num ${totalCVEs > 0 ? 'danger' : 'ok'}">${totalCVEs}</div>
       </div>
-      <div class="stat-card">
+      <div class="stat-cell">
         <div class="stat-label">Critical / High</div>
-        <div class="stat-value red">${critical + high}</div>
+        <div class="stat-num ${critical + high > 0 ? 'danger' : 'ok'}">${critical + high}</div>
       </div>
-      <div class="stat-card">
+      <div class="stat-cell">
         <div class="stat-label">HTTP Headers</div>
-        <div class="stat-value blue">${headerCount}</div>
+        <div class="stat-num accent">${headerCount}</div>
       </div>
     `;
 
-    $('techCount').textContent = techCount;
-    $('headerCount').textContent = headerCount;
+    $('techCount').textContent = techCount ? `(${techCount})` : '';
+    $('headerCount').textContent = headerCount ? `(${headerCount})` : '';
 
     // Tech stack
     if (techCount > 0) {
@@ -936,7 +793,7 @@
         }).join('')
       }</div>`;
     } else {
-      $('techBody').innerHTML = '<div class="empty-state"><div class="empty-icon">🔎</div>No tech detected</div>';
+      $('techBody').innerHTML = '<div class="empty-state">No tech detected</div>';
     }
 
     // Headers
@@ -947,7 +804,7 @@
         ).join('')
       }</div>`;
     } else {
-      $('headersBody').innerHTML = `<div class="empty-state"><div class="empty-icon">📭</div>${esc(headers.error || 'No headers available')}</div>`;
+      $('headersBody').innerHTML = `<div class="empty-state">${esc(headers.error || 'No headers available')}</div>`;
     }
 
     // Vulnerabilities
@@ -955,7 +812,7 @@
     $('vulnSummary').textContent = `${vulnKeys.length} tech scanned · ${totalCVEs} CVEs found`;
 
     if (vulnKeys.length === 0) {
-      $('vulnBody').innerHTML = '<div class="empty-state" style="padding:3rem"><div class="empty-icon">✅</div>No vulnerabilities detected</div>';
+      $('vulnBody').innerHTML = '<div class="empty-state" style="padding:3rem">No vulnerabilities detected</div>';
     } else {
       $('vulnBody').innerHTML = vulnKeys.map((key, i) => {
         const cves = vulns[key] || [];
@@ -965,23 +822,23 @@
           <div class="cve-panel">
             <div class="cve-panel-header" onclick="toggleCVE(this)">
               <div class="cve-key-label">${esc(key)}
-                <span style="font-size:0.72rem;font-weight:500;color:var(--text-muted)">${validCves.length} CVE${validCves.length !== 1 ? 's' : ''}</span>
+                <span>${validCves.length} CVE${validCves.length !== 1 ? 's' : ''}</span>
                 ${hasHigh ? '<span class="sev-badge sev-HIGH">High Risk</span>' : ''}
               </div>
               <span class="cve-toggle ${i < 3 ? 'open' : ''}">▼</span>
             </div>
             <div class="cve-body" style="${i < 3 ? '' : 'display:none'}">
               ${cves.length === 0
-                ? '<div class="empty-state" style="padding:1.2rem">No CVEs found for this component</div>'
+                ? '<div class="empty-state" style="padding:1rem">No CVEs found for this component</div>'
                 : cves.map(cve => {
-                    if (cve.error) return `<div class="cve-card"><span style="color:var(--text-muted);font-size:0.8rem">⚠️ ${esc(cve.error)}</span></div>`;
+                    if (cve.error) return `<div class="cve-card"><span style="color:var(--muted);font-size:0.78rem">⚠ ${esc(cve.error)}</span></div>`;
                     const sev = (cve.severity || 'UNKNOWN').toUpperCase();
                     return `
                       <div class="cve-card">
                         <div class="cve-card-header">
                           <span class="cve-id">${esc(cve.id || 'N/A')}</span>
                           <span class="sev-badge sev-${sev}">${sev}</span>
-                          <span class="cve-score">Score: ${cve.score ?? 'N/A'}</span>
+                          <span class="cve-score">${cve.score ?? 'N/A'}</span>
                         </div>
                         <div class="cve-desc">${esc(cve.description || 'No description available.')}</div>
                       </div>`;
@@ -1008,7 +865,7 @@
     if (!lastScanData) return;
     const btn = $('downloadBtn');
     btn.disabled = true;
-    btn.innerHTML = `<div class="spinner" style="border-top-color:#fff;width:13px;height:13px;"></div> Generating…`;
+    btn.innerHTML = `<div class="spinner" style="border-top-color:currentColor;width:11px;height:11px;"></div> Generating…`;
 
     try {
       const payload = { url: lastScannedUrl, ...lastScanData };
@@ -1030,7 +887,7 @@
       showError('PDF download failed: ' + err.message);
     } finally {
       btn.disabled = false;
-      btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download PDF`;
+      btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download PDF`;
     }
   }
 
