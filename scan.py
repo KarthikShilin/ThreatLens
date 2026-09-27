@@ -7,7 +7,6 @@ NVD_API_KEY = "DA5D6095-66E2-420C-B83F-0860ED78E9B1"
 NVD_BASE_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 
 def parse_relevant_tech(raw_data):
-    """Extract only tech-relevant plugins from WhatWeb output"""
     if "plugins" not in raw_data:
         return {"error": "no plugins found", "raw": raw_data}
 
@@ -31,16 +30,18 @@ def parse_relevant_tech(raw_data):
     }
 
 def scan_tech(url):
-    result = subprocess.run(
-        ["whatweb", "--log-json=-", "-q", "--color=never", url],
-        capture_output=True, text=True
-    )
     try:
+        result = subprocess.run(
+            ["whatweb", "--log-json=-", "-q", "--color=never", url],
+            capture_output=True, text=True
+        )
         data = json.loads(result.stdout)
         raw = data[0] if isinstance(data, list) and data else data
         return parse_relevant_tech(raw)
+    except FileNotFoundError:
+        return {"error": "whatweb not installed", "tech_stack": {}}
     except json.JSONDecodeError:
-        return {"error": "parse failed", "raw": result.stdout}
+        return {"error": "parse failed", "tech_stack": {}}
 
 def get_headers(url):
     resp = requests.get(url, timeout=5)
