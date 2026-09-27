@@ -1,47 +1,106 @@
 # scan.py
-import subprocess
+import re
 import json
 import requests
+from html.parser import HTMLParser
 
 NVD_API_KEY = "DA5D6095-66E2-420C-B83F-0860ED78E9B1"
 NVD_BASE_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 
-def parse_relevant_tech(raw_data):
-    if "plugins" not in raw_data:
-        return {"error": "no plugins found", "raw": raw_data}
+class _TechHTMLParser(HTMLParser):
+    """Lightweight HTML parser that collects script/link srcs and meta tags."""
+    def __init__(self):
+        super().__init__()
+        self.scripts = []
+        self.links   = []
+        self.meta    = {}
 
-    plugins = raw_data["plugins"]
-
-    relevant_keys = [
-        "HTTPServer", "X-Powered-By", "Script", "JQuery", "Bootstrap",
-        "WordPress", "PHP", "ASP", "Angular", "React", "Vue",
-        "nginx", "Apache", "IIS", "Node.js"
-    ]
-
-    filtered = {}
-    for key, value in plugins.items():
-        if any(rk.lower() in key.lower() for rk in relevant_keys):
-            filtered[key] = value.get("string", value.get("version", "detected"))
-
-    return {
-        "target": raw_data.get("target"),
-        "status": raw_data.get("http_status"),
-        "tech_stack": filtered
-    }
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag == "script" and a.get("src"):
+            self.scripts.append(a["src"])
+        elif tag == "link" and a.get("href"):
+            self.links.append(a["href"])
+        elif tag == "meta":
+            name = a.get("name", "").lower()
+            if name == "generator":
+                self.meta["generator"] = a.get("content", "")
 
 def scan_tech(url):
+    """Detect tech stack using HTTP headers + HTML parsing (no external tools)."""
     try:
-        result = subprocess.run(
-            ["whatweb", "--log-json=-", "-q", "--color=never", url],
-            capture_output=True, text=True
+        resp = requests.get(
+            url, timeout=10,
+            headers={"User-Agent": "Mozilla/5.0 (ThreatLens Scanner)"},
+            allow_redirects=True
         )
-        data = json.loads(result.stdout)
-        raw = data[0] if isinstance(data, list) and data else data
-        return parse_relevant_tech(raw)
-    except FileNotFoundError:
-        return {"error": "whatweb not installed", "tech_stack": {}}
-    except json.JSONDecodeError:
-        return {"error": "parse failed", "tech_stack": {}}
+        hdrs = resp.headers
+        html = resp.text
+        tech = {}
+
+        # ── Header-based detection ──────────────────────────────────────────
+        server = hdrs.get("Server") or hdrs.get("server", "")
+        if server:
+            tech["Server"] = [server]
+
+        powered = hdrs.get("X-Powered-By") or hdrs.get("x-powered-by", "")
+        if powered:
+            tech["X-Powered-By"] = [powered]
+
+        aspnet = hdrs.get("X-AspNet-Version", "")
+        if aspnet:
+            tech["ASP.NET"] = [aspnet]
+
+        # Cookie-based detection
+        cookies = hdrs.get("Set-Cookie", "")
+        if "PHPSESSID" in cookies:
+            tech.setdefault("PHP", ["detected"])
+        if "ASP.NET_SessionId" in cookies or "ASPSESSIONID" in cookies:
+            tech.setdefault("ASP.NET", ["detected"])
+
+        # ── HTML parsing ────────────────────────────────────────────────────
+        parser = _TechHTMLParser()
+        try:
+            parser.feed(html)
+        except Exception:
+            pass
+
+        generator = parser.meta.get("generator", "")
+        if generator:
+            tech["Generator"] = [generator]
+
+        # Combine all text sources for pattern matching
+        sources = " ".join(parser.scripts + parser.links) + " " + html[:50000]
+
+        PATTERNS = {
+            "jQuery":    r"jquery[./-]([\d.]+)",
+            "React":     r"react[./-]([\d.]+)|['\"]react['\"]",
+            "Vue":       r"vue[./-]([\d.]+)|Vue\.js",
+            "Angular":   r"angular[./-]([\d.]+)|@angular",
+            "Bootstrap": r"bootstrap[./-]([\d.]+)",
+            "WordPress": r"/wp-content/|/wp-includes/",
+            "Drupal":    r"Drupal\.settings|/sites/default/files",
+            "Joomla":    r"/media/jui/|Joomla!",
+            "Next.js":   r"/_next/static/|__NEXT_DATA__",
+            "Laravel":   r"laravel_session|Laravel",
+            "Django":    r"csrfmiddlewaretoken|django",
+            "Node.js":   r"Express|node\.js",
+        }
+
+        for name, pattern in PATTERNS.items():
+            m = re.search(pattern, sources, re.IGNORECASE)
+            if m:
+                version = m.group(1) if m.lastindex else "detected"
+                tech[name] = [version]
+
+        return {
+            "target": url,
+            "status": resp.status_code,
+            "tech_stack": tech
+        }
+
+    except requests.exceptions.RequestException as e:
+        return {"error": str(e), "tech_stack": {}}
 
 def get_headers(url):
     resp = requests.get(url, timeout=5)
