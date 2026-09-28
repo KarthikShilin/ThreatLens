@@ -24,6 +24,7 @@
       --red:       #b85c4a;
       --yellow:    #b89550;
       --green:     #3ecf6e;
+      --purple:    #9b6fd4;
       --radius:    6px;
     }
 
@@ -200,7 +201,7 @@
       color: var(--dim);
     }
 
-    /* ── Status ── */
+    /* ── Status / Loading ── */
     #statusBar {
       display: none;
       margin-top: 1rem;
@@ -245,21 +246,65 @@
     #errorBanner {
       display: none;
       margin-top: 0.75rem;
-      padding: 0.7rem 1rem;
-      background: rgba(184, 92, 74, 0.1);
+      padding: 0.85rem 1rem;
+      background: rgba(184, 92, 74, 0.08);
       border: 1px solid rgba(184, 92, 74, 0.25);
       border-radius: var(--radius);
       font-size: 0.82rem;
       color: #c97c6a;
       align-items: flex-start;
-      gap: 0.5rem;
-      line-height: 1.5;
+      gap: 0.6rem;
+      line-height: 1.6;
+    }
+
+    #errorBanner .error-icon { font-size: 1rem; flex-shrink: 0; }
+
+    #errorBanner .error-main { font-weight: 600; }
+
+    #errorBanner .error-sub {
+      font-size: 0.76rem;
+      color: var(--muted);
+      margin-top: 0.2rem;
     }
 
     /* ── Results ── */
     #results {
       display: none;
       margin-bottom: 5rem;
+    }
+
+    /* ── View Toggle ── */
+    .view-toggle-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .toggle-btn {
+      padding: 0.35rem 0.9rem;
+      border-radius: 999px;
+      font-size: 0.76rem;
+      font-weight: 500;
+      font-family: 'Space Grotesk', sans-serif;
+      letter-spacing: 0.03em;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--muted);
+      transition: all 0.15s;
+    }
+
+    .toggle-btn.active {
+      background: var(--amber);
+      color: #0f0e0d;
+      border-color: transparent;
+      font-weight: 600;
+    }
+
+    .toggle-btn:not(.active):hover {
+      border-color: rgba(255,255,255,0.15);
+      color: var(--cream);
     }
 
     /* ── Section heading ── */
@@ -295,7 +340,7 @@
       border: 1px solid var(--border);
       border-radius: var(--radius);
       overflow: hidden;
-      margin-bottom: 2.5rem;
+      margin-bottom: 2rem;
     }
 
     @media (max-width: 520px) { .stats-strip { grid-template-columns: repeat(2, 1fr); } }
@@ -362,7 +407,172 @@
     .btn-download:hover { background: rgba(90, 143, 106, 0.08); border-color: rgba(90, 143, 106, 0.6); }
     .btn-download:disabled { opacity: 0.4; cursor: not-allowed; }
 
-    /* ── Two col grid ── */
+    /* ════════════════════════════════════
+       SIMPLE VIEW
+    ════════════════════════════════════ */
+
+    /* Risk Badge */
+    .risk-banner {
+      border-radius: var(--radius);
+      padding: 1.5rem 1.75rem;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+      flex-wrap: wrap;
+    }
+
+    .risk-banner.risk-Low      { background: rgba(62,207,110,0.07);  border: 1px solid rgba(62,207,110,0.25); }
+    .risk-banner.risk-Medium   { background: rgba(184,149,80,0.08);  border: 1px solid rgba(184,149,80,0.3); }
+    .risk-banner.risk-High     { background: rgba(184,92,74,0.08);   border: 1px solid rgba(184,92,74,0.3); }
+    .risk-banner.risk-Critical { background: rgba(155,111,212,0.1);  border: 1px solid rgba(155,111,212,0.35); }
+
+    .risk-pill {
+      font-family: 'DM Serif Display', serif;
+      font-size: 2.4rem;
+      line-height: 1;
+      font-weight: 400;
+    }
+
+    .risk-pill.risk-Low      { color: var(--green); }
+    .risk-pill.risk-Medium   { color: var(--yellow); }
+    .risk-pill.risk-High     { color: var(--red); }
+    .risk-pill.risk-Critical { color: var(--purple); }
+
+    .risk-text { flex: 1; }
+
+    .risk-verdict {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--cream);
+      margin-bottom: 0.25rem;
+    }
+
+    .risk-sub {
+      font-size: 0.8rem;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    /* What-we-checked bar */
+    .checked-line {
+      font-size: 0.78rem;
+      color: var(--dim);
+      padding: 0.6rem 0.9rem;
+      border: 1px solid var(--border2);
+      border-radius: var(--radius);
+      margin-bottom: 1.5rem;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Finding cards */
+    .findings-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+      margin-bottom: 2rem;
+    }
+
+    .finding-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      overflow: hidden;
+    }
+
+    .finding-card-head {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.85rem 1rem;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .finding-card-head:hover { background: rgba(255,255,255,0.02); }
+
+    .finding-sev-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+
+    .dot-CRITICAL { background: var(--purple); }
+    .dot-HIGH     { background: var(--red); }
+    .dot-MEDIUM   { background: var(--yellow); }
+    .dot-LOW      { background: var(--green); }
+    .dot-UNKNOWN  { background: var(--dim); }
+
+    .finding-title-text {
+      flex: 1;
+      font-size: 0.88rem;
+      font-weight: 500;
+      color: var(--cream);
+      line-height: 1.4;
+    }
+
+    .finding-sev-label {
+      font-size: 0.62rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 0.15rem 0.5rem;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+
+    .sev-lbl-CRITICAL { color: var(--purple); border: 1px solid rgba(155,111,212,0.4); background: rgba(155,111,212,0.1); }
+    .sev-lbl-HIGH     { color: #c97c6a;       border: 1px solid rgba(184,92,74,0.4);   background: rgba(184,92,74,0.1); }
+    .sev-lbl-MEDIUM   { color: #c9a45a;       border: 1px solid rgba(184,149,80,0.4);  background: rgba(184,149,80,0.1); }
+    .sev-lbl-LOW      { color: #7aaf8a;       border: 1px solid rgba(90,143,106,0.4);  background: rgba(90,143,106,0.1); }
+    .sev-lbl-UNKNOWN  { color: var(--muted);  border: 1px solid var(--border);         background: transparent; }
+
+    .finding-chevron {
+      font-size: 0.6rem;
+      color: var(--dim);
+      transition: transform 0.2s;
+      flex-shrink: 0;
+    }
+
+    .finding-chevron.open { transform: rotate(180deg); }
+
+    .finding-card-body {
+      padding: 0 1rem 1rem;
+      border-top: 1px solid var(--border2);
+    }
+
+    .finding-plain {
+      font-size: 0.84rem;
+      color: var(--muted);
+      line-height: 1.65;
+      padding: 0.75rem 0 0.5rem;
+    }
+
+    .finding-fix {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+      font-size: 0.8rem;
+      padding: 0.6rem 0.75rem;
+      background: rgba(62,207,110,0.05);
+      border: 1px solid rgba(62,207,110,0.15);
+      border-radius: 4px;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .finding-fix-label {
+      color: var(--amber);
+      font-weight: 600;
+      flex-shrink: 0;
+      font-size: 0.76rem;
+    }
+
+    /* ════════════════════════════════════
+       TECHNICAL VIEW
+    ════════════════════════════════════ */
+
+    /* Two col grid */
     .two-col {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -390,7 +600,7 @@
       margin-bottom: 0.9rem;
     }
 
-    /* ── Tech chips ── */
+    /* Tech chips */
     .tech-chips { display: flex; flex-wrap: wrap; gap: 0.45rem; }
 
     .tech-chip {
@@ -411,7 +621,7 @@
       color: var(--amber);
     }
 
-    /* ── Headers ── */
+    /* Headers */
     .header-list { display: flex; flex-direction: column; }
 
     .header-row {
@@ -433,12 +643,56 @@
       word-break: break-all;
     }
 
+    .header-key.missing { color: var(--red); }
+
     .header-val {
       color: var(--muted);
       word-break: break-all;
     }
 
-    /* ── CVE section ── */
+    /* Security headers section */
+    .sec-headers-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .sec-header-row {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.45rem 0.75rem;
+      border: 1px solid var(--border2);
+      border-radius: 4px;
+      font-size: 0.78rem;
+    }
+
+    .sec-header-row.missing { border-color: rgba(184,92,74,0.2); background: rgba(184,92,74,0.04); }
+    .sec-header-row.present { border-color: rgba(62,207,110,0.15); background: rgba(62,207,110,0.03); }
+
+    .sec-header-name {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.76rem;
+      flex: 1;
+    }
+
+    .sec-header-row.missing .sec-header-name { color: #c97c6a; }
+    .sec-header-row.present .sec-header-name { color: var(--muted); }
+
+    .sec-status-badge {
+      font-size: 0.6rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 0.12rem 0.4rem;
+      border-radius: 3px;
+    }
+
+    .badge-missing { color: #c97c6a; border: 1px solid rgba(184,92,74,0.35); background: rgba(184,92,74,0.08); }
+    .badge-present { color: #7aaf8a; border: 1px solid rgba(90,143,106,0.3); background: rgba(90,143,106,0.06); }
+
+    /* CVE section */
     .vuln-header {
       display: flex;
       align-items: baseline;
@@ -539,7 +793,7 @@
       border-radius: 3px;
     }
 
-    .sev-CRITICAL { background: rgba(180, 60, 180, 0.15); color: #c97ae0; border: 1px solid rgba(180,60,180,0.3); }
+    .sev-CRITICAL { background: rgba(155,111,212,0.15); color: #c97ae0; border: 1px solid rgba(155,111,212,0.3); }
     .sev-HIGH     { background: rgba(184, 92, 74, 0.15);  color: #c97c6a; border: 1px solid rgba(184,92,74,0.3); }
     .sev-MEDIUM   { background: rgba(184, 149, 80, 0.15); color: #c9a45a; border: 1px solid rgba(184,149,80,0.3); }
     .sev-LOW      { background: rgba(90, 143, 106, 0.15); color: #7aaf8a; border: 1px solid rgba(90,143,106,0.3); }
@@ -558,7 +812,7 @@
       line-height: 1.6;
     }
 
-    /* ── Empty ── */
+    /* Empty state */
     .empty-state {
       text-align: center;
       padding: 2rem 1rem;
@@ -566,7 +820,27 @@
       font-size: 0.82rem;
     }
 
-    /* ── Footer ── */
+    /* Divider with label */
+    .view-divider {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin: 2rem 0 1.5rem;
+      color: var(--dim);
+      font-size: 0.7rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+    }
+
+    .view-divider::before,
+    .view-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+
+    /* Footer */
     footer {
       border-top: 1px solid var(--border);
       padding: 1.5rem 0;
@@ -579,12 +853,19 @@
     footer a { color: var(--muted); text-decoration: none; }
     footer a:hover { color: var(--cream); }
 
-    /* ── Scrollbar ── */
+    /* Scrollbar */
     ::-webkit-scrollbar { width: 5px; }
     ::-webkit-scrollbar-track { background: var(--bg); }
     ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 999px; }
 
     .headers-scroll { max-height: 300px; overflow-y: auto; }
+
+    /* Fade-in animation */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(10px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .fade-up { animation: fadeUp 0.35s ease both; }
   </style>
 </head>
 <body>
@@ -624,7 +905,7 @@
         </div>
         <button class="btn-scan" id="scanBtn" onclick="startScan()">Scan</button>
       </div>
-      <div class="scan-hint">Select protocol, then enter domain — results show tech stack, headers &amp; CVEs.</div>
+      <div class="scan-hint">Select protocol, then enter domain — results show risk summary, headers &amp; CVEs.</div>
 
       <!-- Progress -->
       <div id="statusBar">
@@ -638,8 +919,12 @@
       </div>
 
       <!-- Error -->
-      <div id="errorBanner">
-        <span id="errorText">Something went wrong.</span>
+      <div id="errorBanner" style="display:none;">
+        <span class="error-icon">⚠</span>
+        <div>
+          <div class="error-main" id="errorText">Something went wrong.</div>
+          <div class="error-sub" id="errorSub"></div>
+        </div>
       </div>
     </div>
 
@@ -655,27 +940,51 @@
         </button>
       </div>
 
-      <!-- Stats -->
+      <!-- Stats strip -->
       <div class="stats-strip" id="statsRow"></div>
 
-      <!-- Tech + Headers -->
-      <div class="two-col">
-        <div class="col-block">
-          <div class="col-title">Technology Stack <span id="techCount" style="color:var(--amber);margin-left:0.3rem;"></span></div>
-          <div id="techBody"></div>
-        </div>
-        <div class="col-block">
-          <div class="col-title">HTTP Headers <span id="headerCount" style="color:var(--amber);margin-left:0.3rem;"></span></div>
-          <div id="headersBody" class="headers-scroll"></div>
-        </div>
+      <!-- View Toggle -->
+      <div class="view-toggle-bar">
+        <button class="toggle-btn active" id="btnSimple" onclick="setView('simple')">Simple view</button>
+        <button class="toggle-btn" id="btnTech" onclick="setView('technical')">Technical view</button>
       </div>
 
-      <!-- CVE Vulnerabilities -->
-      <div class="vuln-header">
-        <div class="vuln-title">CVE Vulnerabilities</div>
-        <div class="vuln-count" id="vulnSummary"></div>
+      <!-- ═══ SIMPLE VIEW ═══ -->
+      <div id="simpleView">
+        <!-- Risk banner -->
+        <div id="riskBanner" class="risk-banner fade-up"></div>
+        <!-- What we checked -->
+        <div id="checkedLine" class="checked-line"></div>
+        <!-- Finding cards -->
+        <div class="findings-grid" id="findingsGrid"></div>
       </div>
-      <div id="vulnBody"></div>
+
+      <!-- ═══ TECHNICAL VIEW ═══ -->
+      <div id="technicalView" style="display:none;">
+
+        <div class="view-divider">Security Headers</div>
+        <div id="secHeadersBody" class="sec-headers-list"></div>
+
+        <!-- Tech + HTTP Headers -->
+        <div class="two-col">
+          <div class="col-block">
+            <div class="col-title">Technology Stack <span id="techCount" style="color:var(--amber);margin-left:0.3rem;"></span></div>
+            <div id="techBody"></div>
+          </div>
+          <div class="col-block">
+            <div class="col-title">HTTP Headers <span id="headerCount" style="color:var(--amber);margin-left:0.3rem;"></span></div>
+            <div id="headersBody" class="headers-scroll"></div>
+          </div>
+        </div>
+
+        <!-- CVE Vulnerabilities -->
+        <div class="vuln-header">
+          <div class="vuln-title">CVE Vulnerabilities</div>
+          <div class="vuln-count" id="vulnSummary"></div>
+        </div>
+        <div id="vulnBody"></div>
+
+      </div>
 
     </div>
 
@@ -691,35 +1000,42 @@
   const API_BASE = '';
   let lastScanData = null;
   let lastScannedUrl = '';
+  let currentView = 'simple';
 
   const $ = id => document.getElementById(id);
 
   // Enter key trigger
-  $('urlInput').addEventListener('keydown', e => {
-    if (e.key === 'Enter') startScan();
-  });
-  $('urlProtocol').addEventListener('keydown', e => {
-    if (e.key === 'Enter') startScan();
-  });
+  $('urlInput').addEventListener('keydown', e => { if (e.key === 'Enter') startScan(); });
+  $('urlProtocol').addEventListener('keydown', e => { if (e.key === 'Enter') startScan(); });
 
   function setProgress(pct, text) {
     $('progressBar').style.width = pct + '%';
     $('statusText').textContent = text;
   }
 
-  function showError(msg) {
+  function showError(main, sub) {
     const b = $('errorBanner');
-    $('errorText').textContent = msg;
+    $('errorText').textContent = main;
+    $('errorSub').textContent = sub || '';
     b.style.display = 'flex';
   }
 
-  function hideError() {
-    $('errorBanner').style.display = 'none';
+  function hideError() { $('errorBanner').style.display = 'none'; }
+
+  function setView(view) {
+    currentView = view;
+    $('btnSimple').classList.toggle('active', view === 'simple');
+    $('btnTech').classList.toggle('active', view === 'technical');
+    $('simpleView').style.display = view === 'simple' ? 'block' : 'none';
+    $('technicalView').style.display = view === 'technical' ? 'block' : 'none';
   }
 
   async function startScan() {
     const domain = $('urlInput').value.trim().replace(/^\/+/, '');
-    if (!domain) { showError('Please enter a domain to scan.'); return; }
+    if (!domain) {
+      showError('Please enter a domain to scan.', 'Example: example.com');
+      return;
+    }
     const url = $('urlProtocol').value + domain;
 
     hideError();
@@ -731,9 +1047,9 @@
 
     const steps = [
       { delay: 600,  pct: 28, text: 'Fingerprinting technology stack…' },
-      { delay: 1400, pct: 50, text: 'Fetching HTTP headers…' },
-      { delay: 2400, pct: 72, text: 'Querying NVD for CVEs…' },
-      { delay: 3800, pct: 88, text: 'Compiling vulnerability report…' },
+      { delay: 1400, pct: 50, text: 'Checking security headers…' },
+      { delay: 2400, pct: 68, text: 'Querying NVD for CVEs…' },
+      { delay: 3800, pct: 85, text: 'Building risk summary…' },
     ];
 
     let timers = steps.map(s => setTimeout(() => setProgress(s.pct, s.text), s.delay));
@@ -761,19 +1077,32 @@
       timers.forEach(clearTimeout);
       $('statusBar').style.display = 'none';
       $('scanBtn').disabled = false;
-      showError('Scan failed: ' + err.message);
+      const isNetwork = err.message.includes('fetch') || err.message.includes('Failed');
+      showError(
+        isNetwork
+          ? 'Could not reach the target URL.'
+          : 'Scan failed: ' + err.message,
+        isNetwork
+          ? 'The site may be unreachable, or the URL may be invalid. Double-check and try again.'
+          : ''
+      );
     }
   }
 
+  /* ──────────────────────────────────────────────
+     RENDER
+  ────────────────────────────────────────────── */
   function renderResults(data, url) {
-    const tech = data.tech_detected || {};
-    const headers = data.headers || {};
-    const vulns = data.vulnerabilities || {};
+    const tech     = data.tech_detected   || {};
+    const headers  = data.headers         || {};
+    const vulns    = data.vulnerabilities || {};
+    const summary  = data.summary         || {};
+    const secHdrs  = data.security_headers || [];
 
     $('resultsMeta').textContent = `${url} · ${new Date().toLocaleString()}`;
 
-    const techStack = tech.tech_stack || {};
-    const techCount = Object.keys(techStack).length;
+    const techStack   = tech.tech_stack || {};
+    const techCount   = Object.keys(techStack).length;
     const headerCount = Object.keys(headers).length;
     let totalCVEs = 0, critical = 0, high = 0, medium = 0;
 
@@ -788,27 +1117,114 @@
       }
     }
 
+    // Stats strip
+    const risk = summary.overall_risk || 'Unknown';
+    const riskClass = { Low: 'ok', Medium: 'warn', High: 'danger', Critical: 'danger' }[risk] || '';
     $('statsRow').innerHTML = `
       <div class="stat-cell">
-        <div class="stat-label">Tech Detected</div>
-        <div class="stat-num accent">${techCount}</div>
-      </div>
-      <div class="stat-cell">
-        <div class="stat-label">Total CVEs</div>
-        <div class="stat-num ${totalCVEs > 0 ? 'danger' : 'ok'}">${totalCVEs}</div>
+        <div class="stat-label">Overall Risk</div>
+        <div class="stat-num ${riskClass}">${esc(risk)}</div>
       </div>
       <div class="stat-cell">
         <div class="stat-label">Critical / High</div>
         <div class="stat-num ${critical + high > 0 ? 'danger' : 'ok'}">${critical + high}</div>
       </div>
       <div class="stat-cell">
-        <div class="stat-label">HTTP Headers</div>
-        <div class="stat-num accent">${headerCount}</div>
+        <div class="stat-label">Total CVEs</div>
+        <div class="stat-num ${totalCVEs > 0 ? 'warn' : 'ok'}">${totalCVEs}</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-label">Missing Headers</div>
+        <div class="stat-num ${secHdrs.length > 0 ? 'warn' : 'ok'}">${secHdrs.length}</div>
       </div>
     `;
 
+    renderSimpleView(summary, risk);
+    renderTechnicalView(techStack, techCount, headers, headerCount, vulns, totalCVEs, secHdrs);
+
+    // Default to simple view on each new scan
+    setView('simple');
+    $('results').style.display = 'block';
+    $('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  /* ── Simple View ── */
+  function renderSimpleView(summary, risk) {
+    // Risk banner
+    const verdicts = {
+      Low:      'Your site looks healthy — no critical issues were found.',
+      Medium:   'Some issues were found that are worth reviewing and fixing.',
+      High:     'Significant security concerns were detected on this site.',
+      Critical: 'Serious security vulnerabilities were found — immediate action recommended.',
+    };
+    const banner = $('riskBanner');
+    banner.className = `risk-banner risk-${risk} fade-up`;
+    banner.innerHTML = `
+      <div class="risk-pill risk-${risk}">${esc(risk)}</div>
+      <div class="risk-text">
+        <div class="risk-verdict">${verdicts[risk] || 'Risk assessment complete.'}</div>
+        <div class="risk-sub">Note: Results are based on keyword matching and may include false positives. Review with a security professional.</div>
+      </div>
+    `;
+
+    // What we checked
+    $('checkedLine').textContent = summary.what_we_checked || '';
+
+    // Findings
+    const findings = summary.findings || [];
+    const grid = $('findingsGrid');
+    if (findings.length === 0) {
+      grid.innerHTML = `<div class="empty-state" style="padding:2.5rem">No significant findings detected.</div>`;
+      return;
+    }
+
+    grid.innerHTML = findings.map((f, i) => {
+      const sev = (f.severity || 'UNKNOWN').toUpperCase();
+      return `
+        <div class="finding-card fade-up" style="animation-delay:${i * 0.05}s">
+          <div class="finding-card-head" onclick="toggleFinding(this)">
+            <div class="finding-sev-dot dot-${sev}"></div>
+            <div class="finding-title-text">${esc(f.title || 'Finding')}</div>
+            <span class="finding-sev-label sev-lbl-${sev}">${sev}</span>
+            <span class="finding-chevron open">▼</span>
+          </div>
+          <div class="finding-card-body">
+            <div class="finding-plain">${esc(f.plain_explanation || '')}</div>
+            <div class="finding-fix">
+              <span class="finding-fix-label">Fix →</span>
+              <span>${esc(f.recommended_fix || '')}</span>
+            </div>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  /* ── Technical View ── */
+  function renderTechnicalView(techStack, techCount, headers, headerCount, vulns, totalCVEs, secHdrs) {
     $('techCount').textContent = techCount ? `(${techCount})` : '';
     $('headerCount').textContent = headerCount ? `(${headerCount})` : '';
+
+    // Security headers checklist
+    const ALL_SEC_HEADERS = [
+      'Content-Security-Policy',
+      'X-Frame-Options',
+      'X-Content-Type-Options',
+      'Strict-Transport-Security',
+      'Referrer-Policy',
+    ];
+    const missingNames = secHdrs.map(f =>
+      (f.title || '').replace('Missing security header: ', '').trim()
+    );
+    $('secHeadersBody').innerHTML = ALL_SEC_HEADERS.map(name => {
+      const missing = missingNames.includes(name);
+      return `
+        <div class="sec-header-row ${missing ? 'missing' : 'present'}">
+          <span class="sec-header-name">${esc(name)}</span>
+          <span class="sec-status-badge ${missing ? 'badge-missing' : 'badge-present'}">
+            ${missing ? 'Missing' : 'Present'}
+          </span>
+        </div>`;
+    }).join('');
 
     // Tech stack
     if (techCount > 0) {
@@ -823,7 +1239,7 @@
       $('techBody').innerHTML = '<div class="empty-state">No tech detected</div>';
     }
 
-    // Headers
+    // HTTP Headers
     if (headerCount > 0 && !headers.error) {
       $('headersBody').innerHTML = `<div class="header-list">${
         Object.entries(headers).map(([k, v]) =>
@@ -875,9 +1291,15 @@
           </div>`;
       }).join('');
     }
+  }
 
-    $('results').style.display = 'block';
-    $('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  /* ── Interaction helpers ── */
+  function toggleFinding(head) {
+    const body = head.nextElementSibling;
+    const chev = head.querySelector('.finding-chevron');
+    const open = body.style.display !== 'none';
+    body.style.display = open ? 'none' : 'block';
+    chev.classList.toggle('open', !open);
   }
 
   function toggleCVE(header) {
@@ -888,6 +1310,7 @@
     toggle.classList.toggle('open', !isOpen);
   }
 
+  /* ── PDF download ── */
   async function downloadReport() {
     if (!lastScanData) return;
     const btn = $('downloadBtn');
