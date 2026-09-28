@@ -1,10 +1,19 @@
 # scan.py
 import re
 import json
+import os
 import requests
 from html.parser import HTMLParser
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-NVD_API_KEY = "DA5D6095-66E2-420C-B83F-0860ED78E9B1"
+# Load .env if present (python-dotenv is optional)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+NVD_API_KEY = os.environ.get("NVD_API_KEY", "DA5D6095-66E2-420C-B83F-0860ED78E9B1")
 NVD_BASE_URL = "https://services.nvd.nist.gov/rest/json/cves/2.0"
 
 # Security headers that should be present on every site
@@ -208,13 +217,24 @@ def search_cves(keyword, max_results=5):
         return [{"error": str(e)}]
 
 
-def map_vulnerabilities(tech_stack):
-    """Loop through detected tech and pull CVEs for each"""
-    vuln_map = {}
+def map_vulnerabilities(tech_stack, max_workers=6):
+    """Fetch CVEs for all detected tech concurrently using a thread pool."""
+    # Build the flat list of (keyword) to look up
+    keywords = []
     for tech_name, tech_values in tech_stack.items():
         for val in tech_values:
             keyword = f"{tech_name} {val}" if val != "detected" else tech_name
-            vuln_map[keyword] = search_cves(keyword)
+            keywords.append(keyword)
+
+    vuln_map = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_kw = {executor.submit(search_cves, kw): kw for kw in keywords}
+        for future in as_completed(future_to_kw):
+            kw = future_to_kw[future]
+            try:
+                vuln_map[kw] = future.result()
+            except Exception as exc:
+                vuln_map[kw] = [{"error": str(exc)}]
     return vuln_map
 
 
