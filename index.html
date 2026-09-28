@@ -806,6 +806,30 @@
       font-family: 'JetBrains Mono', monospace;
     }
 
+    /* Confidence badges */
+    .conf-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.2rem;
+      font-size: 0.62rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      padding: 0.1rem 0.45rem;
+      border-radius: 3px;
+      vertical-align: middle;
+    }
+    .conf-confirmed {
+      background: rgba(21, 128, 61, 0.12);
+      color: #4ade80;
+      border: 1px solid rgba(21,128,61,0.3);
+    }
+    .conf-possible {
+      background: rgba(180, 83, 9, 0.12);
+      color: #fbbf24;
+      border: 1px solid rgba(180,83,9,0.3);
+    }
+
     .cve-desc {
       font-size: 0.78rem;
       color: var(--muted);
@@ -1059,8 +1083,8 @@
       timers.forEach(clearTimeout);
 
       if (!resp.ok) {
-        const err = await resp.json().catch(() => ({ detail: 'Unknown error' }));
-        throw new Error(err.detail || `HTTP ${resp.status}`);
+        const err = await resp.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(err.error || err.detail || `HTTP ${resp.status}`);
       }
 
       setProgress(100, 'Scan complete!');
@@ -1179,12 +1203,17 @@
     }
 
     grid.innerHTML = findings.map((f, i) => {
-      const sev = (f.severity || 'UNKNOWN').toUpperCase();
+      const sev  = (f.severity || 'UNKNOWN').toUpperCase();
+      const conf = (f.confidence || 'possible').toLowerCase();
+      const confLabel = conf === 'confirmed' ? '✔ Confirmed' : '~ Possible';
+      // Only show confidence badge on CVE findings (not header findings)
+      const showConf = f.source === 'cve';
       return `
         <div class="finding-card fade-up" style="animation-delay:${i * 0.05}s">
           <div class="finding-card-head" onclick="toggleFinding(this)">
             <div class="finding-sev-dot dot-${sev}"></div>
             <div class="finding-title-text">${esc(f.title || 'Finding')}</div>
+            ${showConf ? `<span class="conf-badge conf-${conf}">${confLabel}</span>` : ''}
             <span class="finding-sev-label sev-lbl-${sev}">${sev}</span>
             <span class="finding-chevron open">▼</span>
           </div>
@@ -1275,12 +1304,15 @@
                 ? '<div class="empty-state" style="padding:1rem">No CVEs found for this component</div>'
                 : cves.map(cve => {
                     if (cve.error) return `<div class="cve-card"><span style="color:var(--muted);font-size:0.78rem">⚠ ${esc(cve.error)}</span></div>`;
-                    const sev = (cve.severity || 'UNKNOWN').toUpperCase();
+                    const sev  = (cve.severity || 'UNKNOWN').toUpperCase();
+                    const conf = (cve.confidence || 'possible').toLowerCase();
+                    const confLabel = conf === 'confirmed' ? '✔ Confirmed' : '~ Possible';
                     return `
                       <div class="cve-card">
                         <div class="cve-card-header">
                           <span class="cve-id">${esc(cve.id || 'N/A')}</span>
                           <span class="sev-badge sev-${sev}">${sev}</span>
+                          <span class="conf-badge conf-${conf}">${confLabel}</span>
                           <span class="cve-score">${cve.score ?? 'N/A'}</span>
                         </div>
                         <div class="cve-desc">${esc(cve.description || 'No description available.')}</div>
