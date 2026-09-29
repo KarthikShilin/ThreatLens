@@ -20,7 +20,8 @@ from reportlab.lib.enums import TA_LEFT, TA_CENTER
 
 from scan import (
     scan_tech, get_headers, map_vulnerabilities,
-    check_security_headers, build_summary, SSRFError, validate_target, SECURITY_HEADERS
+    check_security_headers, build_summary, SSRFError, validate_target,
+    SECURITY_HEADERS, _clamp_severity,
 )
 
 # Load .env (optional)
@@ -303,6 +304,8 @@ async def generate_report(request: Request):
         for i, finding in enumerate(findings[:5], 1):
             sev        = finding.get("severity", "UNKNOWN").upper()
             confidence = finding.get("confidence", "possible")
+            # Cap possible CVE severity at MEDIUM in the rendered PDF
+            sev        = _clamp_severity(sev, confidence)
             sev_color  = _SEV_COLORS.get(sev, colors.HexColor("#64748b"))
             conf_color = _CONF_COLORS.get(confidence, colors.HexColor("#64748b"))
 
@@ -454,6 +457,8 @@ async def generate_report(request: Request):
                     continue
                 sev        = cve.get("severity", "UNKNOWN").upper()
                 confidence = cve.get("confidence", "possible")
+                # Cap possible CVE severity at MEDIUM in the rendered PDF
+                sev        = _clamp_severity(sev, confidence)
                 score      = cve.get("score", "N/A")
                 cve_id     = cve.get("id", "N/A")
                 desc       = cve.get("description", "No description.")[:300]

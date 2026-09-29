@@ -32,6 +32,46 @@ MAX_RESPONSE_BYTES = 2 * 1024 * 1024   # 2 MB body cap
 MAX_REDIRECTS      = 5
 REQUEST_TIMEOUT    = 10
 
+# ── Generic / versionless server identifiers ─────────────────────────────────
+# When a Server header (or other tech value) matches one of these names AND
+# carries no version number, skip the CVE keyword-fallback entirely.
+# Keyword searches against CDN / proxy names produce highly unrelated matches
+# (e.g. a Crafatar CVE appearing for "cloudflare").
+GENERIC_SERVER_NAMES = {
+    "cloudflare", "nginx", "apache", "apache httpd",
+    "microsoft-iis", "iis", "openresty", "caddy", "lighttpd",
+    "litespeed", "gunicorn", "uvicorn", "werkzeug", "tornado",
+    "jetty", "tomcat", "server", "web server",
+}
+
+# Regex: does the value contain at least one digit group that looks like a
+# version number?  e.g. "nginx/1.24.0" → yes; "cloudflare" → no.
+_VERSION_RE = re.compile(r"\d")
+
+
+def _is_generic_server_value(value: str) -> bool:
+    """
+    Return True when `value` is a generic server identifier with no usable
+    version string — i.e. the CVE keyword-fallback should be skipped.
+
+    Examples that return True  : "cloudflare", "nginx", "Apache"
+    Examples that return False : "nginx/1.24.0", "Apache/2.4.51"
+    """
+    stripped = value.strip().lower()
+    # If there is ANY digit in the value, treat it as a versioned string
+    # (the caller already skips lookup when version == "detected" / "").
+    if _VERSION_RE.search(stripped):
+        return False
+    # Match against the known-generic list
+    # Also treat any single bare word that has no slash/dot as generic.
+    if stripped in GENERIC_SERVER_NAMES:
+        return True
+    # Bare server name with no slash and no digits (e.g. "LiteSpeed", "Server")
+    if "/" not in stripped and "." not in stripped:
+        return True
+    return False
+
+
 # ── CPE prefix table for known products ───────────────────────────────────────
 # Used to perform accurate NVD CPE queries instead of free-text keyword search.
 # Keys must match the tech names emitted by scan_tech().
@@ -464,6 +504,12 @@ def map_vulnerabilities(tech_stack: dict, max_workers: int = 6) -> dict:
             # No version → skip to avoid high false-positive rate
             return label, []
 
+        # Skip keyword fallback for generic / versionless server identifiers
+        # (e.g. "Server: cloudflare", "Server: nginx" with no version number).
+        # These produce highly unrelated NVD matches.
+        if _is_generic_server_value(version):
+            return label, []
+
         cpe_prefix = CPE_PREFIX.get(tech_name)
         if cpe_prefix:
             return label, _search_cves_by_cpe(cpe_prefix, version)
@@ -499,13 +545,34 @@ def map_vulnerabilities(tech_stack: dict, max_workers: int = 6) -> dict:
 _SEV_ORDER = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1, "UNKNOWN": 0}
 
 
+# Severity levels that are capped for "possible" confidence CVEs.
+# Only "confirmed" (CPE + version matched) CVEs may display HIGH or CRITICAL.
+_POSSIBLE_MAX_SEV = "MEDIUM"
+_POSSIBLE_MAX_SEV_ORDER = _SEV_ORDER[_POSSIBLE_MAX_SEV]  # = 2
+
+
+def _clamp_severity(sev: str, confidence: str) -> str:
+    """
+    Apply the confidence-based severity cap:
+      - confidence == 'confirmed' → use raw severity unchanged.
+      - confidence == 'possible'  → clamp to at most MEDIUM.
+    """
+    if confidence != "confirmed":
+        if _SEV_ORDER.get(sev, 0) > _POSSIBLE_MAX_SEV_ORDER:
+            return _POSSIBLE_MAX_SEV
+    return sev
+
+
 def _cve_to_finding(cve: dict, tech_key: str) -> dict:
     """Convert a raw CVE dict into a plain-language finding."""
-    sev        = (cve.get("severity") or "UNKNOWN").upper()
+    raw_sev    = (cve.get("severity") or "UNKNOWN").upper()
     confidence = cve.get("confidence", "possible")
     cve_id     = cve.get("id", "Unknown CVE")
     score      = cve.get("score")
     desc       = cve.get("description", "")
+
+    # Cap severity: possible CVEs may not display above MEDIUM
+    sev = _clamp_severity(raw_sev, confidence)
 
     first_sentence = desc.split(". ")[0].rstrip(".")
     if len(first_sentence) > 200:

@@ -18,6 +18,9 @@ from scan import (
     validate_target,
     check_security_headers,
     build_summary,
+    map_vulnerabilities,
+    _is_generic_server_value,
+    _clamp_severity,
 )
 
 
@@ -236,3 +239,147 @@ class TestBuildSummary:
     def test_what_we_checked_line_present(self):
         result = build_summary({"jQuery": ["3.0"]}, {}, [])
         assert "Checked" in result["what_we_checked"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# _clamp_severity — finding-level severity cap
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestClampSeverity:
+    """Unit tests for the _clamp_severity helper."""
+
+    def test_confirmed_critical_unchanged(self):
+        assert _clamp_severity("CRITICAL", "confirmed") == "CRITICAL"
+
+    def test_confirmed_high_unchanged(self):
+        assert _clamp_severity("HIGH", "confirmed") == "HIGH"
+
+    def test_confirmed_medium_unchanged(self):
+        assert _clamp_severity("MEDIUM", "confirmed") == "MEDIUM"
+
+    def test_possible_critical_clamped(self):
+        assert _clamp_severity("CRITICAL", "possible") == "MEDIUM"
+
+    def test_possible_high_clamped(self):
+        assert _clamp_severity("HIGH", "possible") == "MEDIUM"
+
+    def test_possible_medium_unchanged(self):
+        """MEDIUM is already at the cap, should not change."""
+        assert _clamp_severity("MEDIUM", "possible") == "MEDIUM"
+
+    def test_possible_low_unchanged(self):
+        """LOW is below the cap, should not change."""
+        assert _clamp_severity("LOW", "possible") == "LOW"
+
+
+class TestFindingSeverityCapping:
+    """
+    Verify that possible-confidence CVEs appear as at most MEDIUM in the
+    findings list returned by build_summary.
+    """
+
+    def test_possible_high_finding_clamped_to_medium(self):
+        """A possible HIGH CVE must appear as MEDIUM in the findings list."""
+        cve = _make_cve("HIGH", "possible", 8.5)
+        result = build_summary({"SomeLib": ["1.0"]}, {"SomeLib 1.0": [cve]}, [])
+        findings = result["findings"]
+        assert findings, "Expected at least one finding"
+        sev = findings[0]["severity"]
+        assert sev == "MEDIUM", (
+            f"Possible HIGH CVE must be displayed as MEDIUM, got {sev}"
+        )
+
+    def test_possible_critical_finding_clamped_to_medium(self):
+        """A possible CRITICAL CVE must appear as MEDIUM in the findings list."""
+        cve = _make_cve("CRITICAL", "possible", 9.8)
+        result = build_summary({"SomeLib": ["1.0"]}, {"SomeLib 1.0": [cve]}, [])
+        findings = result["findings"]
+        assert findings, "Expected at least one finding"
+        sev = findings[0]["severity"]
+        assert sev == "MEDIUM", (
+            f"Possible CRITICAL CVE must be displayed as MEDIUM, got {sev}"
+        )
+
+    def test_confirmed_high_finding_not_clamped(self):
+        """A confirmed HIGH CVE must remain HIGH in the findings list."""
+        cve = _make_cve("HIGH", "confirmed", 8.0)
+        result = build_summary({"SomeLib": ["1.0"]}, {"SomeLib 1.0": [cve]}, [])
+        findings = result["findings"]
+        assert findings, "Expected at least one finding"
+        sev = findings[0]["severity"]
+        assert sev == "HIGH", (
+            f"Confirmed HIGH CVE must remain HIGH, got {sev}"
+        )
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# _is_generic_server_value — generic-server guard
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class TestIsGenericServerValue:
+    """Unit tests for the _is_generic_server_value guard."""
+
+    # — should be identified as generic (return True) —
+    def test_cloudflare_is_generic(self):
+        assert _is_generic_server_value("cloudflare") is True
+
+    def test_cloudflare_mixed_case_is_generic(self):
+        assert _is_generic_server_value("Cloudflare") is True
+
+    def test_nginx_bare_is_generic(self):
+        assert _is_generic_server_value("nginx") is True
+
+    def test_apache_bare_is_generic(self):
+        assert _is_generic_server_value("Apache") is True
+
+    def test_iis_bare_is_generic(self):
+        assert _is_generic_server_value("IIS") is True
+
+    # — versioned values should NOT be generic (return False) —
+    def test_nginx_with_version_not_generic(self):
+        assert _is_generic_server_value("nginx/1.24.0") is False
+
+    def test_apache_with_version_not_generic(self):
+        assert _is_generic_server_value("Apache/2.4.51") is False
+
+    def test_openresty_with_version_not_generic(self):
+        assert _is_generic_server_value("openresty/1.21.4.3") is False
+
+
+class TestGenericServerZeroCVEs:
+    """
+    Generic / versionless server identifiers must produce zero CVE entries
+    (the keyword-fallback search must be skipped entirely).
+    """
+
+    def test_cloudflare_no_version_zero_cves(self):
+        """Server: cloudflare → no CVE lookup should be attempted."""
+        # map_vulnerabilities receives the tech_stack from scan_tech.
+        # Simulate the "Server" key with value "cloudflare" (no version).
+        tech_stack = {"Server": ["cloudflare"]}
+        vuln_map = map_vulnerabilities(tech_stack)
+        for key, cves in vuln_map.items():
+            assert cves == [], (
+                f"Expected no CVEs for generic server identifier '{key}', "
+                f"got: {cves}"
+            )
+
+    def test_nginx_no_version_zero_cves(self):
+        """Server: nginx (bare, no version) → no CVE lookup."""
+        tech_stack = {"Server": ["nginx"]}
+        vuln_map = map_vulnerabilities(tech_stack)
+        for key, cves in vuln_map.items():
+            assert cves == [], (
+                f"Expected no CVEs for generic server identifier '{key}', "
+                f"got: {cves}"
+            )
+
+    def test_apache_no_version_zero_cves(self):
+        """Server: Apache (bare, no version) → no CVE lookup."""
+        tech_stack = {"Server": ["Apache"]}
+        vuln_map = map_vulnerabilities(tech_stack)
+        for key, cves in vuln_map.items():
+            assert cves == [], (
+                f"Expected no CVEs for generic server identifier '{key}', "
+                f"got: {cves}"
+            )
