@@ -3,3 +3,7 @@ uvicorn
 requests
 reportlab
 python-dotenv
+python-multipart
+Pillow
+opencv-python-headless
+rapidocr-onnxruntime

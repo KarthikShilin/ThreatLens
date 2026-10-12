@@ -890,6 +890,423 @@
       to   { opacity: 1; transform: translateY(0); }
     }
     .fade-up { animation: fadeUp 0.35s ease both; }
+
+    /* ────────────────────────────────────────────
+       APP SHELL — sidebar + content
+    ──────────────────────────────────────────── */
+    .app-shell {
+      display: flex;
+      align-items: flex-start;
+      min-height: calc(100vh - 80px);
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: 220px;
+      flex-shrink: 0;
+      padding: 2rem 0 2rem 2rem;
+      position: sticky;
+      top: 0;
+      align-self: flex-start;
+    }
+
+    .sidebar-label {
+      font-size: 0.62rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--dim);
+      font-weight: 500;
+      padding: 0 0.75rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .sidebar-nav {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 0.9rem;
+      border-radius: var(--radius);
+      border: 1px solid transparent;
+      background: transparent;
+      color: var(--muted);
+      font-family: 'Space Grotesk', sans-serif;
+      font-size: 0.84rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+      text-align: left;
+      width: 100%;
+    }
+    .nav-item:hover:not(.active) {
+      background: rgba(255,255,255,0.04);
+      color: var(--cream);
+      border-color: var(--border2);
+    }
+    .nav-item.active {
+      background: var(--amber-dim);
+      color: var(--amber);
+      border-color: rgba(62,207,110,0.2);
+      font-weight: 600;
+    }
+    .nav-item svg { flex-shrink: 0; opacity: 0.7; }
+    .nav-item.active svg { opacity: 1; }
+    .nav-item-content { display: flex; flex-direction: column; gap: 0.05rem; }
+    .nav-item-label { font-size: 0.84rem; line-height: 1.2; }
+    .nav-item-desc {
+      font-size: 0.67rem;
+      color: var(--dim);
+      font-weight: 400;
+      letter-spacing: 0.01em;
+    }
+    .nav-item.active .nav-item-desc { color: rgba(62,207,110,0.6); }
+
+    /* Sidebar divider */
+    .sidebar-divider {
+      height: 1px;
+      background: var(--border);
+      margin: 0.75rem 0.75rem;
+    }
+
+    /* ── Main content panel ── */
+    .main-panel {
+      flex: 1;
+      min-width: 0;
+      padding: 0 2rem;
+      border-left: 1px solid var(--border);
+      min-height: calc(100vh - 80px);
+    }
+
+    /* ────────────────────────────────────────────
+       IMAGE SCANNER
+    ──────────────────────────────────────────── */
+    .img-drop-zone {
+      border: 1.5px dashed var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      padding: 3rem 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      position: relative;
+    }
+    .img-drop-zone.drag-over {
+      border-color: var(--amber);
+      background: var(--amber-dim);
+    }
+    .img-drop-zone input[type=file] {
+      position: absolute; inset: 0; opacity: 0; cursor: pointer;
+    }
+    .drop-icon {
+      font-size: 2.2rem;
+      margin-bottom: 0.75rem;
+      display: block;
+    }
+    .drop-title {
+      font-size: 0.9rem;
+      font-weight: 600;
+      color: var(--cream);
+      margin-bottom: 0.3rem;
+    }
+    .drop-sub {
+      font-size: 0.76rem;
+      color: var(--muted);
+    }
+    .drop-privacy {
+      font-size: 0.72rem;
+      color: var(--dim);
+      margin-top: 1.1rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.4rem;
+    }
+    /* Image preview */
+    .img-preview-wrap {
+      display: none;
+      margin-top: 1.2rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--surface);
+    }
+    .img-preview-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.6rem 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .img-preview-label {
+      font-size: 0.72rem;
+      color: var(--dim);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .btn-clear-img {
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      font-size: 0.76rem;
+      cursor: pointer;
+      padding: 0.2rem 0.5rem;
+      border-radius: 3px;
+      font-family: 'Space Grotesk', sans-serif;
+    }
+    .btn-clear-img:hover { color: var(--red); }
+    #imgPreviewEl {
+      display: block;
+      width: 100%;
+      max-height: 320px;
+      object-fit: contain;
+      background: #050505;
+    }
+    /* Scan image button */
+    .btn-scan-img {
+      width: 100%;
+      margin-top: 1rem;
+      padding: 0.75rem 1.4rem;
+      background: var(--amber);
+      color: #0f0e0d;
+      border: none;
+      border-radius: var(--radius);
+      font-size: 0.85rem;
+      font-weight: 600;
+      font-family: 'Space Grotesk', sans-serif;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .btn-scan-img:hover:not(:disabled) { opacity: 0.88; }
+    .btn-scan-img:disabled { opacity: 0.4; cursor: not-allowed; }
+    /* Image error */
+    #imgErrorBanner {
+      display: none;
+      margin-top: 0.75rem;
+      padding: 0.85rem 1rem;
+      background: rgba(184, 92, 74, 0.08);
+      border: 1px solid rgba(184, 92, 74, 0.25);
+      border-radius: var(--radius);
+      font-size: 0.82rem;
+      color: #c97c6a;
+      gap: 0.6rem;
+      line-height: 1.6;
+      align-items: flex-start;
+    }
+    /* Image results */
+    #imgResults { display: none; margin-top: 1.8rem; }
+    .img-result-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.2rem;
+      margin-bottom: 1.5rem;
+    }
+    @media (max-width: 600px) { .img-result-row { grid-template-columns: 1fr; } }
+    .img-annotated-wrap {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: #050505;
+    }
+    .img-annotated-header {
+      font-size: 0.68rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--dim);
+      padding: 0.5rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+    #imgAnnotated {
+      display: block;
+      width: 100%;
+      max-height: 300px;
+      object-fit: contain;
+    }
+    .img-risk-summary {
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+    /* Risk strip for image */
+    .img-risk-strip {
+      border-radius: var(--radius);
+      padding: 1.2rem 1.4rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex: 0 0 auto;
+    }
+    .img-risk-strip.risk-Low      { background: rgba(62,207,110,0.07);  border: 1px solid rgba(62,207,110,0.25); }
+    .img-risk-strip.risk-Medium   { background: rgba(184,149,80,0.08);  border: 1px solid rgba(184,149,80,0.3); }
+    .img-risk-strip.risk-High     { background: rgba(184,92,74,0.08);   border: 1px solid rgba(184,92,74,0.3); }
+    .img-risk-num {
+      font-family: 'DM Serif Display', serif;
+      font-size: 2rem;
+      line-height: 1;
+    }
+    .img-risk-num.risk-Low    { color: var(--green); }
+    .img-risk-num.risk-Medium { color: var(--yellow); }
+    .img-risk-num.risk-High   { color: var(--red); }
+    .img-risk-label { font-size: 0.78rem; color: var(--muted); margin-top: 0.15rem; }
+    /* Img findings */
+    .img-finding {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      padding: 0.8rem 1rem;
+    }
+    .img-finding-title {
+      font-size: 0.84rem;
+      font-weight: 600;
+      color: var(--cream);
+      margin-bottom: 0.35rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .img-kind-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .dot-phone { background: #ff5050; }
+    .dot-qr    { background: #50c8ff; }
+    .dot-vreg  { background: #ffb41e; }
+    .dot-face  { background: #64dc78; }
+    .img-finding-exp {
+      font-size: 0.79rem;
+      color: var(--muted);
+      line-height: 1.6;
+      margin-bottom: 0.4rem;
+    }
+    .img-finding-fix {
+      font-size: 0.76rem;
+      color: var(--muted);
+      display: flex;
+      gap: 0.4rem;
+      padding: 0.45rem 0.65rem;
+      background: rgba(62,207,110,0.05);
+      border: 1px solid rgba(62,207,110,0.15);
+      border-radius: 4px;
+      line-height: 1.5;
+    }
+    .img-fix-lbl { color: var(--amber); font-weight: 600; flex-shrink: 0; }
+    /* Technical raw detections */
+    .det-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.76rem;
+      font-family: 'JetBrains Mono', monospace;
+      margin-top: 0.75rem;
+    }
+    .det-table th {
+      text-align: left;
+      color: var(--dim);
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 0.4rem 0.6rem;
+      border-bottom: 1px solid var(--border);
+      font-weight: 500;
+      font-family: 'Space Grotesk', sans-serif;
+    }
+    .det-table td {
+      padding: 0.4rem 0.6rem;
+      border-bottom: 1px solid var(--border2);
+      color: var(--muted);
+      word-break: break-all;
+    }
+    .det-table tr:last-child td { border-bottom: none; }
+    .det-kind-chip {
+      display: inline-block;
+      padding: 0.1rem 0.4rem;
+      border-radius: 3px;
+      font-size: 0.62rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .kind-phone { background: rgba(255,80,80,0.15); color: #ff8080; border: 1px solid rgba(255,80,80,0.3); }
+    .kind-qr    { background: rgba(80,200,255,0.12); color: #80d8ff; border: 1px solid rgba(80,200,255,0.3); }
+    .kind-vreg  { background: rgba(255,180,30,0.12); color: #ffcc60; border: 1px solid rgba(255,180,30,0.3); }
+    .kind-face  { background: rgba(100,220,120,0.12); color: #80ea90; border: 1px solid rgba(100,220,120,0.3); }
+    /* Image view toggle bar (reuse .view-toggle-bar but scoped) */
+    #imgViewToggleBar { margin: 0 0 1rem; }
+
+    /* EXIF table */
+    .exif-section { margin-top: 1.5rem; }
+    .exif-section-title {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--dim);
+      font-weight: 500;
+      margin-bottom: 0.6rem;
+    }
+    .exif-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.76rem;
+    }
+    .exif-table td {
+      padding: 0.35rem 0.6rem;
+      border-bottom: 1px solid var(--border2);
+      vertical-align: top;
+    }
+    .exif-table tr:last-child td { border-bottom: none; }
+    .exif-key {
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--amber);
+      white-space: nowrap;
+      width: 38%;
+    }
+    .exif-val { color: var(--muted); word-break: break-all; }
+    .exif-sensitive {
+      display: inline-block;
+      padding: 0.08rem 0.35rem;
+      background: rgba(184,92,74,0.12);
+      border: 1px solid rgba(184,92,74,0.3);
+      border-radius: 3px;
+      color: #c97c6a;
+      font-size: 0.6rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-left: 0.4rem;
+      vertical-align: middle;
+    }
+    .exif-gps-banner {
+      padding: 0.7rem 0.9rem;
+      background: rgba(184,92,74,0.07);
+      border: 1px solid rgba(184,92,74,0.25);
+      border-radius: var(--radius);
+      font-size: 0.8rem;
+      color: #c97c6a;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+      margin-bottom: 0.8rem;
+      line-height: 1.55;
+    }
+    /* Responsive sidebar collapse */
+    @media (max-width: 700px) {
+      .app-shell { flex-direction: column; }
+      .sidebar {
+        width: 100%;
+        padding: 1rem 1rem 0;
+        position: static;
+      }
+      .sidebar-nav { flex-direction: row; }
+      .nav-item { flex: 1; justify-content: center; }
+      .nav-item-desc { display: none; }
+      .main-panel { border-left: none; border-top: 1px solid var(--border); padding: 0 1rem; }
+    }
   </style>
 </head>
 <body>
@@ -902,17 +1319,40 @@
     </div>
   </nav>
 
-  <div class="page">
 
-    <!-- HERO -->
-    <section class="hero">
-      <div class="eyebrow">Security Scanner</div>
-      <h1>Surface what's<br/><em>hiding</em> in your stack.</h1>
-      <p>Enter any URL to fingerprint the technology, inspect HTTP headers, and surface real CVE vulnerabilities from the NVD database.</p>
-    </section>
+    <!-- APP SHELL: sidebar + content -->
+  <div class="app-shell">
+
+    <!-- ═════════════ SIDEBAR ═════════════ -->
+    <aside class="sidebar">
+      <div class="sidebar-label">Scanners</div>
+      <div class="sidebar-nav">
+
+        <button class="nav-item active" id="sideTabUrl" onclick="switchMainTab('url')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <div class="nav-item-content">
+            <span class="nav-item-label">URL Scanner</span>
+            <span class="nav-item-desc">CVEs &amp; HTTP headers</span>
+          </div>
+        </button>
+
+        <button class="nav-item" id="sideTabImg" onclick="switchMainTab('image')">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          <div class="nav-item-content">
+            <span class="nav-item-label">Image Scanner</span>
+            <span class="nav-item-desc">EXIF &amp; PII detection</span>
+          </div>
+        </button>
+
+      </div>
+    </aside>
+
+    <!-- ═══════════ MAIN CONTENT ═══════════ -->
+    <div class="main-panel">
+
 
     <!-- SCAN BOX -->
-    <div class="scan-box">
+    <div class="scan-box" id="urlScanBox">
       <div style="display:flex;gap:0.6rem;">
         <div class="input-row" style="flex:1;">
           <select id="urlProtocol">
@@ -1010,9 +1450,108 @@
 
       </div>
 
-    </div>
+    </div><!-- /#results -->
 
-    <!-- FOOTER -->
+    <!-- ══════════════════════════════════════
+         IMAGE SCANNER PANEL
+    ══════════════════════════════════════ -->
+    <div id="imgPanel" style="display:none;">
+
+      <!-- Upload area -->
+      <div class="scan-box">
+        <div
+          class="img-drop-zone"
+          id="imgDropZone"
+          onclick="document.getElementById('imgFileInput').click()"
+          ondragover="imgDragOver(event)"
+          ondragleave="imgDragLeave(event)"
+          ondrop="imgDrop(event)"
+        >
+          <input
+            type="file"
+            id="imgFileInput"
+            accept="image/jpeg,image/png,image/webp"
+            style="display:none;"
+            onchange="imgFileSelected(event)"
+          />
+          <span class="drop-icon">🔍</span>
+          <div class="drop-title">Drop an image here, or click to browse</div>
+          <div class="drop-sub">JPEG · PNG · WebP &nbsp;·&nbsp; Max 5 MB</div>
+          <div class="drop-privacy">🔒 Images are processed in memory and not stored.</div>
+        </div>
+
+        <!-- Preview -->
+        <div class="img-preview-wrap" id="imgPreviewWrap">
+          <div class="img-preview-header">
+            <span class="img-preview-label" id="imgFileName">preview</span>
+            <button class="btn-clear-img" onclick="clearImgScan()">✕ Clear</button>
+          </div>
+          <img id="imgPreviewEl" src="" alt="preview" />
+        </div>
+
+        <!-- Error -->
+        <div id="imgErrorBanner" style="display:none;">
+          <span>⚠</span>
+          <div id="imgErrorText">Something went wrong.</div>
+        </div>
+
+        <!-- Scan button -->
+        <button class="btn-scan-img" id="imgScanBtn" onclick="startImageScan()" disabled>Scan Image</button>
+      </div>
+
+      <!-- Results -->
+      <div id="imgResults">
+
+        <!-- View toggle -->
+        <div class="view-toggle-bar" id="imgViewToggleBar">
+          <button class="toggle-btn active" id="imgBtnSimple" onclick="setImgView('simple')">Simple view</button>
+          <button class="toggle-btn" id="imgBtnTech" onclick="setImgView('technical')">Technical view</button>
+        </div>
+
+        <!-- Main two-column layout -->
+        <div class="img-result-row">
+          <!-- Annotated image -->
+          <div class="img-annotated-wrap">
+            <div class="img-annotated-header">Annotated Image</div>
+            <img id="imgAnnotated" src="" alt="annotated scan result" />
+          </div>
+
+          <!-- Risk + findings summary -->
+          <div class="img-risk-summary">
+            <div id="imgRiskStrip" class="img-risk-strip risk-Low">
+              <div>
+                <div class="img-risk-num risk-Low" id="imgRiskNum">Low</div>
+                <div class="img-risk-label">Risk level</div>
+              </div>
+            </div>
+            <div id="imgCleanMsg" style="display:none;padding:1rem;border:1px solid var(--border);border-radius:var(--radius);font-size:0.83rem;color:var(--green);background:rgba(62,207,110,0.05);">
+              ✓ No sensitive information detected
+            </div>
+            <div id="imgFindingsSummary" style="font-size:0.75rem;color:var(--dim);"></div>
+          </div>
+        </div>
+
+        <!-- Simple view: finding cards -->
+        <div id="imgSimpleView">
+          <div id="imgFindingsGrid" class="findings-grid"></div>
+        </div>
+
+
+        <!-- Technical view: raw detections + EXIF -->
+        <div id="imgTechView" style="display:none;">
+          <div class="view-divider">Raw Detections</div>
+          <div id="imgDetTable"></div>
+
+          <!-- EXIF Section -->
+          <div class="view-divider">EXIF Metadata</div>
+          <div id="imgExifSection">
+            <div class="empty-state" style="padding:1.5rem">No EXIF data extracted yet.</div>
+          </div>
+        </div>
+
+      </div><!-- /#imgResults -->
+    </div><!-- /#imgPanel -->
+
     <footer>
       ThreatLens &mdash; For authorized security assessment only &middot;
       Powered by <a href="https://nvd.nist.gov/" target="_blank">NVD</a>
@@ -1168,6 +1707,7 @@
 
     // Default to simple view on each new scan
     setView('simple');
+    $('results')._hasResults = true;
     $('results').style.display = 'block';
     $('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -1377,6 +1917,314 @@
     return String(s)
       .replace(/&/g,'&amp;').replace(/</g,'&lt;')
       .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     MAIN TAB SWITCHING
+  ══════════════════════════════════════════════════════════════════ */
+  let _mainTab = 'url';
+
+  function switchMainTab(tab) {
+    _mainTab = tab;
+    $('sideTabUrl').classList.toggle('active', tab === 'url');
+    $('sideTabImg').classList.toggle('active', tab === 'image');
+
+    $('imgPanel').style.display = tab === 'image' ? 'block' : 'none';
+
+    // Show/hide URL scanner box by its ID
+    $('urlScanBox').style.display = tab === 'url' ? 'block' : 'none';
+
+    // results div: only show in url tab if it has been rendered
+    if (tab !== 'url') {
+      $('results').style.display = 'none';
+    } else if ($('results')._hasResults) {
+      $('results').style.display = 'block';
+    }
+
+    if (tab === 'image') {
+      $('imgPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     IMAGE SCANNER
+  ══════════════════════════════════════════════════════════════════ */
+  let _imgFile = null;
+  let _imgCurrentView = 'simple';
+  const IMG_MAX_BYTES = 5 * 1024 * 1024;
+  const IMG_ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+
+  /* ── Drag-and-drop ── */
+  function imgDragOver(e) {
+    e.preventDefault();
+    $('imgDropZone').classList.add('drag-over');
+  }
+  function imgDragLeave(e) {
+    $('imgDropZone').classList.remove('drag-over');
+  }
+  function imgDrop(e) {
+    e.preventDefault();
+    $('imgDropZone').classList.remove('drag-over');
+    const file = e.dataTransfer?.files?.[0];
+    if (file) _setImgFile(file);
+  }
+
+  /* ── File input change ── */
+  function imgFileSelected(e) {
+    const file = e.target.files?.[0];
+    if (file) _setImgFile(file);
+  }
+
+  function _setImgFile(file) {
+    hideImgError();
+    $('imgResults').style.display = 'none';
+
+    // Client-side checks (server re-validates)
+    if (!IMG_ALLOWED_TYPES.includes(file.type)) {
+      showImgError('Only JPEG, PNG, or WebP images are accepted.');
+      return;
+    }
+    if (file.size > IMG_MAX_BYTES) {
+      showImgError('File is too large. Maximum size is 5 MB.');
+      return;
+    }
+
+    _imgFile = file;
+    $('imgFileName').textContent = file.name + ' · ' + (file.size / 1024).toFixed(0) + ' KB';
+    $('imgPreviewEl').src = URL.createObjectURL(file);
+    $('imgPreviewWrap').style.display = 'block';
+    $('imgScanBtn').disabled = false;
+    $('imgScanBtn').textContent = 'Scan Image';
+  }
+
+  function clearImgScan() {
+    _imgFile = null;
+    $('imgPreviewWrap').style.display = 'none';
+    $('imgPreviewEl').src = '';
+    $('imgScanBtn').disabled = true;
+    $('imgResults').style.display = 'none';
+    $('imgFileInput').value = '';
+    hideImgError();
+  }
+
+  function showImgError(msg) {
+    $('imgErrorText').textContent = msg;
+    $('imgErrorBanner').style.display = 'flex';
+  }
+  function hideImgError() {
+    $('imgErrorBanner').style.display = 'none';
+  }
+
+  /* ── Scan ── */
+  async function startImageScan() {
+    if (!_imgFile) return;
+    hideImgError();
+    $('imgResults').style.display = 'none';
+
+    const btn = $('imgScanBtn');
+    btn.disabled = true;
+    btn.innerHTML = `<div class="spinner" style="display:inline-block;border-top-color:#0f0e0d;width:12px;height:12px;margin-right:6px;"></div>Scanning…`;
+
+    try {
+      const fd = new FormData();
+      fd.append('file', _imgFile);
+      const resp = await fetch(`${API_BASE}/scan-image`, { method: 'POST', body: fd });
+
+      let data;
+      try { data = await resp.json(); } catch { data = { error: 'Invalid server response' }; }
+
+      if (!resp.ok || data.error) {
+        showImgError(data.error || `Server error (HTTP ${resp.status})`);
+        return;
+      }
+
+      renderImageResults(data);
+    } catch (err) {
+      showImgError('Scan failed: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Scan Image';
+    }
+  }
+
+  /* ── Render results ── */
+  function renderImageResults(data) {
+    // Annotated image
+    if (data.annotated_image) {
+      $('imgAnnotated').src = 'data:image/png;base64,' + data.annotated_image;
+    }
+
+    // Risk strip
+    const risk = data.risk || 'Low';
+    const strip = $('imgRiskStrip');
+    strip.className = `img-risk-strip risk-${risk}`;
+    const num = $('imgRiskNum');
+    num.className = `img-risk-num risk-${risk}`;
+    num.textContent = risk;
+
+    // Clean message
+    $('imgCleanMsg').style.display = data.clean ? 'block' : 'none';
+
+    // Summary line
+    const findings = data.findings || [];
+    const dets = data.detections || [];
+    const exif = data.exif || {};
+    if (dets.length > 0 || (exif.fields && exif.fields.length > 0)) {
+      const exifNote = (exif.fields && exif.fields.length > 0)
+        ? ` · ${exif.fields.length} EXIF field${exif.fields.length !== 1 ? 's' : ''}${ exif.has_sensitive ? ' (⚠ sensitive)' : ''}` : '';
+      $('imgFindingsSummary').textContent =
+        dets.length > 0
+          ? `${dets.length} detection${dets.length !== 1 ? 's' : ''} across ${findings.length} category${findings.length !== 1 ? 'ies' : 'y'}${exifNote}`
+          : `No PII detections${exifNote}`;
+    } else {
+      $('imgFindingsSummary').textContent = '';
+    }
+
+    // Simple view
+    _renderImgSimple(findings, data.clean);
+
+    // Technical view
+    _renderImgTechnical(dets, exif);
+
+    // Show results
+    setImgView('simple');
+    $('imgResults').style.display = 'block';
+    $('imgResults').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  const _kindLabel = { phone: 'Phone', qr: 'QR Code', vreg: 'Plate', face: 'Face' };
+
+  function _renderImgSimple(findings, clean) {
+    const grid = $('imgFindingsGrid');
+    if (clean || findings.length === 0) {
+      grid.innerHTML = '';
+      return;
+    }
+    grid.innerHTML = findings.map((f, i) => `
+      <div class="img-finding fade-up" style="animation-delay:${i * 0.07}s">
+        <div class="img-finding-title">
+          <span class="img-kind-dot dot-${esc(f.kind)}"></span>
+          ${esc(f.title)}
+          <span style="margin-left:auto;font-size:0.7rem;color:var(--dim);">${f.count} found</span>
+        </div>
+        <div class="img-finding-exp">${esc(f.plain_explanation)}</div>
+        <div class="img-finding-fix">
+          <span class="img-fix-lbl">Fix →</span>
+          <span>${esc(f.recommended_fix)}</span>
+        </div>
+        ${f.values && f.values.length > 0 && f.kind !== 'face' ? `
+          <div style="margin-top:0.5rem;font-size:0.72rem;color:var(--dim);font-family:'JetBrains Mono',monospace;">
+            ${f.values.map(v => `<span style="background:var(--bg);border:1px solid var(--border2);border-radius:3px;padding:0.1rem 0.4rem;margin-right:0.3rem;display:inline-block;">${esc(v.length > 50 ? v.slice(0,47)+'…' : v)}</span>`).join('')}
+          </div>` : ''}
+      </div>
+    `).join('');
+  }
+
+  function _renderImgTechnical(dets, exif) {
+    // ── Raw detections table ──────────────────────────────────────────────
+    const wrap = $('imgDetTable');
+    if (!dets || dets.length === 0) {
+      wrap.innerHTML = '<div class="empty-state" style="padding:2rem">No PII detections to display.</div>';
+    } else {
+      wrap.innerHTML = `
+        <table class="det-table">
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Label</th>
+              <th>Value</th>
+              <th>Box (x,y,w,h)</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${dets.map(d => `
+              <tr>
+                <td><span class="det-kind-chip kind-${esc(d.kind)}">${esc(_kindLabel[d.kind] || d.kind)}</span></td>
+                <td style="color:var(--cream);">${esc(d.label)}</td>
+                <td>${esc(d.value.length > 60 ? d.value.slice(0,57)+'…' : d.value)}</td>
+                <td style="color:var(--amber);">${d.box ? d.box.join(', ') : 'N/A'}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>`;
+    }
+
+    // ── EXIF section ──────────────────────────────────────────────────────
+    const exifSection = $('imgExifSection');
+    if (!exif || !exif.fields || exif.fields.length === 0) {
+      exifSection.innerHTML = `<div class="empty-state" style="padding:1.5rem">No EXIF metadata found in this image. (PNG and some WebP files contain no EXIF data.)</div>`;
+      return;
+    }
+
+    let html = '';
+
+    // GPS banner if coordinates present
+    if (exif.gps && exif.gps.lat !== undefined) {
+      const { lat, lon, alt, map_url } = exif.gps;
+      html += `
+        <div class="exif-gps-banner">
+          <span style="font-size:1.1rem;">📍</span>
+          <div>
+            <strong>GPS Location Embedded</strong> — this image contains geographic coordinates.
+            <br/>
+            <span style="font-family:'JetBrains Mono',monospace;font-size:0.76rem;">
+              ${lat}°, ${lon}°${alt != null ? ` · Altitude: ${alt} m` : ''}
+            </span>
+            <br/>
+            <a href="${esc(map_url)}" target="_blank" rel="noopener noreferrer"
+               style="color:#c97c6a;font-size:0.76rem;text-decoration:underline;">
+              View on Google Maps ↗
+            </a>
+          </div>
+        </div>`;
+    }
+
+    // Sensitive fields first, then all fields
+    const sensitiveFields = exif.fields.filter(f => f.sensitive);
+    const otherFields     = exif.fields.filter(f => !f.sensitive);
+
+    if (sensitiveFields.length > 0) {
+      html += `
+        <div class="exif-section">
+          <div class="exif-section-title">⚠ Sensitive Fields (${sensitiveFields.length})</div>
+          <table class="exif-table">
+            <tbody>
+              ${sensitiveFields.map(f => `
+                <tr>
+                  <td class="exif-key">${esc(f.tag)}<span class="exif-sensitive">sensitive</span></td>
+                  <td class="exif-val">${esc(f.value)}</td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`;
+    }
+
+    if (otherFields.length > 0) {
+      html += `
+        <div class="exif-section">
+          <div class="exif-section-title">All EXIF Fields (${exif.fields.length} total)</div>
+          <table class="exif-table">
+            <tbody>
+              ${otherFields.map(f => `
+                <tr>
+                  <td class="exif-key">${esc(f.tag)}</td>
+                  <td class="exif-val">${esc(f.value)}</td>
+                </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`;
+    }
+
+    exifSection.innerHTML = html;
+  }
+
+  /* ── Image view toggle ── */
+  function setImgView(view) {
+    _imgCurrentView = view;
+    $('imgBtnSimple').classList.toggle('active', view === 'simple');
+    $('imgBtnTech').classList.toggle('active', view === 'technical');
+    $('imgSimpleView').style.display = view === 'simple' ? 'block' : 'none';
+    $('imgTechView').style.display = view === 'technical' ? 'block' : 'none';
   }
 </script>
 </body>

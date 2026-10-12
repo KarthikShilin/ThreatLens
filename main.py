@@ -7,7 +7,7 @@ import datetime
 import io
 from collections import defaultdict
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, UploadFile, File
 from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -23,6 +23,7 @@ from scan import (
     check_security_headers, build_summary, SSRFError, validate_target,
     SECURITY_HEADERS, _clamp_severity,
 )
+from image_scan import scan_image, scan_result_to_dict
 
 # Load .env (optional)
 try:
@@ -511,3 +512,48 @@ async def generate_report(request: Request):
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# ── /scan-image ───────────────────────────────────────────────────────────────
+IMAGE_MAX_BYTES = 5 * 1024 * 1024  # 5 MB — enforced here before reading body
+
+
+@app.post("/scan-image")
+async def scan_image_route(request: Request, file: UploadFile = File(...)):
+    """Accepts a JPEG/PNG/WebP upload; returns image-scan JSON."""
+    # Per-IP rate limit (shared quota with /scan)
+    client_ip = request.client.host if request.client else "unknown"
+    if not _check_rate_limit(client_ip):
+        return JSONResponse(
+            {"error": "Too many requests. Please wait a minute before scanning again."},
+            status_code=429,
+        )
+
+    # Content-length pre-check (advisory — body is re-checked after reading)
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > IMAGE_MAX_BYTES + 8192:  # + multipart overhead
+                return JSONResponse({"error": "File too large. Maximum is 5 MB."}, status_code=413)
+        except ValueError:
+            pass
+
+    # Read upload into memory — never touch disk
+    try:
+        raw = await file.read(IMAGE_MAX_BYTES + 1)
+    except Exception:
+        return JSONResponse({"error": "Failed to read uploaded file."}, status_code=400)
+
+    if len(raw) > IMAGE_MAX_BYTES:
+        return JSONResponse({"error": "File too large. Maximum is 5 MB."}, status_code=413)
+
+    if len(raw) == 0:
+        return JSONResponse({"error": "Empty file received."}, status_code=400)
+
+    result = scan_image(raw)
+    payload = scan_result_to_dict(result)
+
+    if "error" in payload:
+        return JSONResponse(payload, status_code=422)
+
+    return JSONResponse(payload)
