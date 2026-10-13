@@ -1,6 +1,7 @@
 # main.py
 import os
 import json
+import logging
 import time
 import threading
 import datetime
@@ -550,8 +551,12 @@ async def scan_image_route(request: Request, file: UploadFile = File(...)):
     if len(raw) == 0:
         return JSONResponse({"error": "Empty file received."}, status_code=400)
 
-    result = scan_image(raw)
-    payload = scan_result_to_dict(result)
+    try:
+        result = scan_image(raw)
+        payload = scan_result_to_dict(result)
+    except Exception as exc:
+        logging.exception("Internal error in scan_image_route: %s", exc)
+        return JSONResponse({"error": "Internal error scanning image"}, status_code=500)
 
     if "error" in payload:
         return JSONResponse(payload, status_code=422)

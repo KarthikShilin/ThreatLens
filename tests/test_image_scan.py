@@ -655,3 +655,90 @@ class TestStripExif:
         assert res_report.media_type == "application/pdf"
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# Robustness & Failure Safety Tests
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestScanRobustnessAndDetection:
+    """Tests ensuring scanner safety, OCR failure graceful degradation, and detection."""
+
+    def test_phone_and_plate_detection(self):
+        """Image containing phone number and vehicle plate detects both."""
+        from PIL import Image, ImageDraw
+        from image_scan import scan_image, scan_result_to_dict
+
+        img = Image.new("RGB", (600, 300), color=(255, 255, 255))
+        draw = ImageDraw.Draw(img)
+        draw.text((50, 50), "Call: +91 9876543210", fill=(0, 0, 0))
+        draw.text((50, 150), "Vehicle: MH 12 AB 1234", fill=(0, 0, 0))
+        buf = io.BytesIO()
+        img.save(buf, format="PNG")
+
+        res = scan_image(buf.getvalue())
+        d = scan_result_to_dict(res)
+        kinds = {det["kind"] for det in d["detections"]}
+        assert "phone" in kinds
+        assert "vreg" in kinds
+        assert d["clean"] is False
+
+    def test_ocr_failure_safe_handling(self):
+        """When RapidOCR fails to load, scan_image does not crash, returns warning, and clean == False."""
+        import unittest.mock as mock
+        import asyncio
+        from starlette.datastructures import UploadFile
+        from main import scan_image_route, Request
+        import image_scan
+
+        png_bytes = _make_png_bytes(30, 30)
+
+        # Clear cached engine to test initialization exception
+        image_scan._ocr_engine = None
+        with mock.patch("rapidocr_onnxruntime.RapidOCR", side_effect=RuntimeError("Simulated OCR model failure")):
+            # 1. Direct scan_image call
+            res = image_scan.scan_image(png_bytes)
+            assert res.error is None
+            d = image_scan.scan_result_to_dict(res)
+            assert d["clean"] is False
+            assert len(d.get("warnings", [])) > 0
+            assert "NOT checked" in d["warnings"][0]
+
+            # 2. Route endpoint call
+            req = Request({"type": "http", "client": ("127.0.0.1", 54324), "headers": []})
+            uf = UploadFile(filename="test.png", file=io.BytesIO(png_bytes))
+            resp = asyncio.run(scan_image_route(req, uf))
+            assert resp.status_code == 200
+            import json
+            payload = json.loads(resp.body)
+            assert payload.get("clean") is False
+            assert len(payload.get("warnings", [])) > 0
+
+    def test_internal_crash_safe_handling(self):
+        """When an internal exception occurs, scan_image returns error result and route returns JSON."""
+        import unittest.mock as mock
+        import asyncio
+        from starlette.datastructures import UploadFile
+        from main import scan_image_route, Request
+        import image_scan
+
+        png_bytes = _make_png_bytes(30, 30)
+
+        # 1. scan_image catches internal errors and returns ScanResult(error=...)
+        with mock.patch("image_scan._build_risk_and_findings", side_effect=RuntimeError("Simulated internal fault")):
+            res = image_scan.scan_image(png_bytes)
+            assert res.error is not None
+            d = image_scan.scan_result_to_dict(res)
+            assert "error" in d
+
+        # 2. scan_image_route catches any unhandled exception and returns JSON 500
+        with mock.patch("main.scan_image", side_effect=RuntimeError("Fatal error")):
+            req = Request({"type": "http", "client": ("127.0.0.1", 54325), "headers": []})
+            uf = UploadFile(filename="test.png", file=io.BytesIO(png_bytes))
+            resp = asyncio.run(scan_image_route(req, uf))
+            assert resp.status_code == 500
+            assert resp.headers["content-type"] == "application/json"
+            import json
+            payload = json.loads(resp.body)
+            assert payload == {"error": "Internal error scanning image"}
+
+
+

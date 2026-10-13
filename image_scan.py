@@ -16,11 +16,15 @@ from __future__ import annotations
 
 import base64
 import io
+import logging
+import os
 import re
 import time
 import threading
 from dataclasses import dataclass, field
 from typing import Optional, Any
+
+logger = logging.getLogger("threatlens.image_scan")
 
 import cv2
 import numpy as np
@@ -75,6 +79,7 @@ class ScanResult:
     findings:     list[dict]       = field(default_factory=list)
     annotated_b64: str             = ""
     exif:         dict             = field(default_factory=dict)
+    warnings:     list[str]        = field(default_factory=list)
     error:        Optional[str]    = None
 
 
@@ -161,7 +166,8 @@ def _get_ocr():
             try:
                 from rapidocr_onnxruntime import RapidOCR
                 _ocr_engine = RapidOCR()
-            except ImportError:
+            except Exception as exc:
+                logger.exception("Failed to initialize RapidOCR engine: %s", exc)
                 _ocr_engine = False   # sentinel: unavailable
     return _ocr_engine
 
@@ -315,35 +321,42 @@ def _detect_qr(cv_img: np.ndarray) -> list[Detection]:
 # ── Face detector ─────────────────────────────────────────────────────────────
 _face_lock = threading.Lock()
 _face_detector = None   # None = not tried; False = unavailable
+_YUNET_MODEL_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "face_detection_yunet_2023mar.onnx"
+)
 
 
 def _get_face_detector():
     global _face_detector
     with _face_lock:
         if _face_detector is None:
-            try:
-                # Try YuNet (OpenCV 4.8+)
-                fd = cv2.FaceDetectorYN.create(
-                    model="face_detection_yunet_2023mar.onnx",
-                    config="",
-                    input_size=(320, 320),
-                    score_threshold=0.7,
-                    nms_threshold=0.3,
-                    top_k=5000,
-                )
-                _face_detector = ("yunet", fd)
-            except Exception:
+            if os.path.isfile(_YUNET_MODEL_PATH):
+                try:
+                    # Try YuNet (OpenCV 4.8+)
+                    fd = cv2.FaceDetectorYN.create(
+                        model=_YUNET_MODEL_PATH,
+                        config="",
+                        input_size=(320, 320),
+                        score_threshold=0.7,
+                        nms_threshold=0.3,
+                        top_k=5000,
+                    )
+                    _face_detector = ("yunet", fd)
+                except Exception as exc:
+                    logger.exception("Failed to initialize YuNet face detector: %s", exc)
+            if _face_detector is None:
                 # Fallback: Haar cascade
                 try:
-                    cc = cv2.CascadeClassifier(
-                        cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-                    )
-                    if cc.empty():
-                        _face_detector = False
-                    else:
-                        _face_detector = ("haar", cc)
-                except Exception:
-                    _face_detector = False
+                    if hasattr(cv2, "CascadeClassifier"):
+                        cc = cv2.CascadeClassifier(
+                            cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+                        )
+                        if not cc.empty():
+                            _face_detector = ("haar", cc)
+                except Exception as exc:
+                    logger.exception("Failed to initialize Haar face detector: %s", exc)
+            if _face_detector is None:
+                _face_detector = False
     return _face_detector
 
 
@@ -774,94 +787,119 @@ def scan_image(raw_bytes: bytes) -> ScanResult:
     Main entry point.
     Accepts raw image bytes; returns a ScanResult.
     Never writes to disk.
+    Never raises an uncaught exception.
     """
     try:
         cv_img, pil_img = _load_image(raw_bytes)
     except ValueError as exc:
         return ScanResult(error=str(exc))
+    except Exception as exc:
+        logger.exception("Failed to load image: %s", exc)
+        return ScanResult(error="Could not decode image")
 
-    all_detections: list[Detection] = []
-
-    # ── EXIF extraction (before any downscaling side-effects) ─────────────────
-    exif_data: dict = {}
     try:
-        pil_orig = Image.open(io.BytesIO(raw_bytes))
-        pil_orig.load()
-        exif_data = _extract_exif(pil_orig)
-    except Exception:
-        exif_data = {"fields": [], "gps": {}, "has_sensitive": False}
+        all_detections: list[Detection] = []
+        warnings: list[str] = []
 
-    # ── OCR (one pass, reuse for phone + vreg) ────────────────────────────────
-    ocr_result = _run_ocr(cv_img)
-    all_detections.extend(_detect_phones(ocr_result))
-    all_detections.extend(_detect_vregs(ocr_result))
+        # ── EXIF extraction (before any downscaling side-effects) ─────────────────
+        exif_data: dict = {}
+        try:
+            pil_orig = Image.open(io.BytesIO(raw_bytes))
+            pil_orig.load()
+            exif_data = _extract_exif(pil_orig)
+        except Exception as exc:
+            logger.exception("EXIF extraction failed: %s", exc)
+            exif_data = {"fields": [], "gps": {}, "has_sensitive": False}
 
-    # ── QR ────────────────────────────────────────────────────────────────────
-    all_detections.extend(_detect_qr(cv_img))
-
-    # ── Faces ─────────────────────────────────────────────────────────────────
-    all_detections.extend(_detect_faces(cv_img))
-
-    # ── Risk + findings ───────────────────────────────────────────────────────
-    risk, findings = _build_risk_and_findings(all_detections)
-
-    # ── EXIF findings & risk bump ─────────────────────────────────────────────
-    has_high_exif = (
-        bool(exif_data.get("gps")) or
-        any(f.get("tier") == "high" for f in exif_data.get("fields", []))
-    )
-    has_medium_exif = any(f.get("tier") == "medium" for f in exif_data.get("fields", []))
-
-    if has_high_exif:
-        risk = "High"
-        gps_vals = []
-        if exif_data.get("gps") and exif_data["gps"].get("lat") is not None:
-            gps = exif_data["gps"]
-            coord_str = f"{gps['lat']}°, {gps['lon']}°"
-            if gps.get("alt") is not None:
-                coord_str += f" ({gps['alt']} m)"
-            gps_vals.append(coord_str)
+        # ── OCR (one pass, reuse for phone + vreg) ────────────────────────────────
+        if not _get_ocr():
+            warnings.append("Phone numbers and vehicle numbers were NOT checked (OCR detector unavailable).")
         else:
-            for f in exif_data.get("fields", []):
-                if f.get("tier") == "high":
-                    gps_vals.append(f"{f['tag']}: {f['value']}")
+            try:
+                ocr_result = _run_ocr(cv_img)
+                all_detections.extend(_detect_phones(ocr_result))
+                all_detections.extend(_detect_vregs(ocr_result))
+            except Exception as exc:
+                logger.exception("OCR detection failed: %s", exc)
+                warnings.append("Phone numbers and vehicle numbers were NOT checked (OCR detector failed).")
 
-        findings.append({
-            "kind":              "gps",
-            "title":             "GPS Location Data Detected",
-            "plain_explanation": "This photo contains GPS coordinates that may reveal where it was taken.",
-            "recommended_fix":   "Remove metadata before sharing.",
-            "values":            gps_vals,
-            "count":             len(gps_vals) if gps_vals else 1,
-        })
+        # ── QR ────────────────────────────────────────────────────────────────────
+        try:
+            all_detections.extend(_detect_qr(cv_img))
+        except Exception as exc:
+            logger.exception("QR detection failed: %s", exc)
 
-    if has_medium_exif:
-        if risk == "Low":
-            risk = "Medium"
-        med_fields = [f for f in exif_data.get("fields", []) if f.get("tier") == "medium"]
-        med_vals = [f"{f['tag']}: {f['value']}" for f in med_fields]
-        findings.append({
-            "kind":              "exif_meta",
-            "title":             "Device & Creator Metadata Detected",
-            "plain_explanation": "This photo contains device serial numbers or creator information that may identify your device or personal identity.",
-            "recommended_fix":   "Remove metadata before sharing.",
-            "values":            med_vals,
-            "count":             len(med_vals),
-        })
+        # ── Faces ─────────────────────────────────────────────────────────────────
+        try:
+            all_detections.extend(_detect_faces(cv_img))
+        except Exception as exc:
+            logger.exception("Face detection failed: %s", exc)
 
-    # ── Annotated image ───────────────────────────────────────────────────────
-    try:
-        annotated_b64 = _annotate(cv_img, all_detections)
-    except Exception:
-        annotated_b64 = ""
+        # ── Risk + findings ───────────────────────────────────────────────────────
+        risk, findings = _build_risk_and_findings(all_detections)
 
-    return ScanResult(
-        detections=all_detections,
-        risk=risk,
-        findings=findings,
-        annotated_b64=annotated_b64,
-        exif=exif_data,
-    )
+        # ── EXIF findings & risk bump ─────────────────────────────────────────────
+        has_high_exif = (
+            bool(exif_data.get("gps")) or
+            any(f.get("tier") == "high" for f in exif_data.get("fields", []))
+        )
+        has_medium_exif = any(f.get("tier") == "medium" for f in exif_data.get("fields", []))
+
+        if has_high_exif:
+            risk = "High"
+            gps_vals = []
+            if exif_data.get("gps") and exif_data["gps"].get("lat") is not None:
+                gps = exif_data["gps"]
+                coord_str = f"{gps['lat']}°, {gps['lon']}°"
+                if gps.get("alt") is not None:
+                    coord_str += f" ({gps['alt']} m)"
+                gps_vals.append(coord_str)
+            else:
+                for f in exif_data.get("fields", []):
+                    if f.get("tier") == "high":
+                        gps_vals.append(f"{f['tag']}: {f['value']}")
+
+            findings.append({
+                "kind":              "gps",
+                "title":             "GPS Location Data Detected",
+                "plain_explanation": "This photo contains GPS coordinates that may reveal where it was taken.",
+                "recommended_fix":   "Remove metadata before sharing.",
+                "values":            gps_vals,
+                "count":             len(gps_vals) if gps_vals else 1,
+            })
+
+        if has_medium_exif:
+            if risk == "Low":
+                risk = "Medium"
+            med_fields = [f for f in exif_data.get("fields", []) if f.get("tier") == "medium"]
+            med_vals = [f"{f['tag']}: {f['value']}" for f in med_fields]
+            findings.append({
+                "kind":              "exif_meta",
+                "title":             "Device & Creator Metadata Detected",
+                "plain_explanation": "This photo contains device serial numbers or creator information that may identify your device or personal identity.",
+                "recommended_fix":   "Remove metadata before sharing.",
+                "values":            med_vals,
+                "count":             len(med_vals),
+            })
+
+        # ── Annotated image ───────────────────────────────────────────────────────
+        try:
+            annotated_b64 = _annotate(cv_img, all_detections)
+        except Exception as exc:
+            logger.exception("Image annotation failed: %s", exc)
+            annotated_b64 = ""
+
+        return ScanResult(
+            detections=all_detections,
+            risk=risk,
+            findings=findings,
+            annotated_b64=annotated_b64,
+            exif=exif_data,
+            warnings=warnings,
+        )
+    except Exception as exc:
+        logger.exception("Internal error in scan_image: %s", exc)
+        return ScanResult(error="Internal error processing image")
 
 
 # ── Serialisation helper ──────────────────────────────────────────────────────
@@ -871,6 +909,7 @@ def scan_result_to_dict(result: ScanResult) -> dict:
         return {"error": result.error}
 
     has_sensitive_exif = bool(result.exif.get("has_sensitive", False))
+    has_warnings = bool(result.warnings)
     return {
         "risk":            result.risk,
         "findings":        result.findings,
@@ -884,6 +923,7 @@ def scan_result_to_dict(result: ScanResult) -> dict:
             for d in result.detections
         ],
         "annotated_image": result.annotated_b64,
-        "clean":           len(result.detections) == 0 and not has_sensitive_exif,
+        "clean":           len(result.detections) == 0 and not has_sensitive_exif and not has_warnings,
         "exif":            result.exif,
+        "warnings":        result.warnings,
     }

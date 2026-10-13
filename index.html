@@ -1545,6 +1545,7 @@
             <div id="imgCleanMsg" style="display:none;padding:1rem;border:1px solid var(--border);border-radius:var(--radius);font-size:0.83rem;color:var(--green);background:rgba(62,207,110,0.05);">
               ✓ No sensitive information detected
             </div>
+            <div id="imgWarningBanner" style="display:none;padding:0.75rem 1rem;border:1px solid rgba(184,149,80,0.35);border-radius:var(--radius);font-size:0.8rem;color:var(--yellow);background:rgba(184,149,80,0.08);line-height:1.5;"></div>
             <div id="imgFindingsSummary" style="font-size:0.75rem;color:var(--dim);"></div>
           </div>
         </div>
@@ -2025,6 +2026,7 @@
     $('imgScanBtn').disabled = true;
     $('imgResults').style.display = 'none';
     if ($('imgResultsBar')) $('imgResultsBar').style.display = 'none';
+    if ($('imgWarningBanner')) { $('imgWarningBanner').style.display = 'none'; $('imgWarningBanner').innerHTML = ''; }
     $('imgFileInput').value = '';
     hideImgError();
   }
@@ -2084,8 +2086,22 @@
     num.className = `img-risk-num risk-${risk}`;
     num.textContent = risk;
 
-    // Clean message
-    $('imgCleanMsg').style.display = data.clean ? 'block' : 'none';
+    // Warnings (e.g. OCR skipped)
+    const warnings = data.warnings || [];
+    const warnEl = $('imgWarningBanner');
+    if (warnEl) {
+      if (warnings.length > 0) {
+        warnEl.innerHTML = warnings.map(w => `<div>⚠ ${esc(w)}</div>`).join('');
+        warnEl.style.display = 'block';
+      } else {
+        warnEl.style.display = 'none';
+        warnEl.innerHTML = '';
+      }
+    }
+
+    // Clean message - never show when detectors were skipped or warnings exist
+    const isClean = Boolean(data.clean && warnings.length === 0);
+    $('imgCleanMsg').style.display = isClean ? 'block' : 'none';
 
     // Results bar (Download cleaned image)
     const exif = data.exif || {};
