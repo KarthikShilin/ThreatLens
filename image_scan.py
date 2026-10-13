@@ -33,6 +33,12 @@ import cv2
 import numpy as np
 from PIL import Image, UnidentifiedImageError, ExifTags
 
+try:
+    from pyzbar import pyzbar
+    _HAS_PYZBAR = True
+except Exception:
+    _HAS_PYZBAR = False
+
 # ── Constants ─────────────────────────────────────────────────────────────────
 MAX_BYTES       = 5 * 1024 * 1024          # 5 MB
 MAX_PIXELS      = 4000 * 4000              # ~16 MP — guard against decompression bombs
@@ -335,51 +341,250 @@ def _detect_vregs(ocr_result) -> list[Detection]:
 
 # ── QR code detector ──────────────────────────────────────────────────────────
 def _detect_qr(cv_img: np.ndarray) -> list[Detection]:
-    detections: list[Detection] = []
-
-    def _call():
-        detector = cv2.QRCodeDetector()
+    """
+    Detects QR codes in images using a robust multi-stage pipeline:
+      1. Direct decoders (pyzbar + OpenCV QRCodeDetectorAruco + OpenCV QRCodeDetector)
+         across multiple image representations (raw grayscale, CLAHE contrast-enhanced,
+         sharpened, and multi-scale).
+      2. OpenCV detect() corner-finder to capture QR codes even if data payload
+         decoding fails (e.g. slight distortion, damaged modules, noise).
+      3. 2D high-frequency checkerboard / gradient texture heatmap analysis to locate
+         perspective-distorted, stylized, screen-photographed, or AI-generated QR codes.
+      4. Overlap suppression (IoU / intersection containment) prioritizing decoded values.
+    """
+    def _call() -> list[tuple[str, tuple[int, int, int, int]]]:
+        raw_results: list[tuple[str, tuple[int, int, int, int]]] = []
         gray = cv2.cvtColor(cv_img, cv2.COLOR_BGR2GRAY)
-        data, points, _ = detector.detectAndDecode(gray)
-        results = []
-        if data and points is not None:
-            results.append((data, points))
-        # Try multi-detect
+        h, w = gray.shape[:2]
+
+        # Preprocessed variants
+        variants: list[tuple[np.ndarray, float]] = [(gray, 1.0)]
         try:
-            retval, data_list, points_list, _ = detector.detectAndDecodeMulti(gray)
-            if retval and data_list:
-                for d, p in zip(data_list, points_list):
-                    if d and d != (results[0][0] if results else None):
-                        results.append((d, p))
+            clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
+            variants.append((clahe.apply(gray), 1.0))
         except Exception:
             pass
-        return results
+        try:
+            kernel = np.array([[0, -1, 0], [-1, 5, -1], [0, -1, 0]])
+            variants.append((cv2.filter2D(gray, -1, kernel), 1.0))
+        except Exception:
+            pass
+        if max(h, w) <= 1600:
+            try:
+                up = cv2.resize(gray, (0, 0), fx=1.5, fy=1.5, interpolation=cv2.INTER_CUBIC)
+                variants.append((up, 1.5))
+            except Exception:
+                pass
+
+        # 1. Pyzbar pass
+        if _HAS_PYZBAR:
+            for var, sf in variants:
+                try:
+                    decoded = pyzbar.decode(var, symbols=[pyzbar.ZBarSymbol.QRCODE])
+                    for item in decoded:
+                        try:
+                            text = item.data.decode("utf-8", errors="replace").strip()
+                        except Exception:
+                            text = str(item.data).strip()
+                        rect = item.rect
+                        bx = int(rect.left / sf)
+                        by = int(rect.top / sf)
+                        bw = int(rect.width / sf)
+                        bh = int(rect.height / sf)
+                        if bw > 0 and bh > 0:
+                            raw_results.append((text or "[QR Code Detected]", (bx, by, bw, bh)))
+                except Exception:
+                    pass
+                if raw_results:
+                    break
+
+        # 2. OpenCV Detectors (QRCodeDetectorAruco + QRCodeDetector)
+        detectors: list[Any] = []
+        if hasattr(cv2, "QRCodeDetectorAruco"):
+            try:
+                detectors.append(cv2.QRCodeDetectorAruco())
+            except Exception:
+                pass
+        try:
+            detectors.append(cv2.QRCodeDetector())
+        except Exception:
+            pass
+
+        for det in detectors:
+            for var, sf in variants:
+                # Multi-detect & decode
+                try:
+                    retval, decoded_info, points, _ = det.detectAndDecodeMulti(var)
+                    if retval and points is not None and len(points) > 0:
+                        for d_text, pts in zip(decoded_info, points):
+                            pts = np.array(pts, dtype=np.float32).reshape(-1, 2) / sf
+                            bx = int(pts[:, 0].min())
+                            by = int(pts[:, 1].min())
+                            bw = int(pts[:, 0].max()) - bx
+                            bh = int(pts[:, 1].max()) - by
+                            if bw > 0 and bh > 0:
+                                raw_results.append((d_text.strip() if d_text else "[QR Code Detected]", (bx, by, bw, bh)))
+                except Exception:
+                    pass
+
+                # Single detect & decode
+                try:
+                    d_text, pts, _ = det.detectAndDecode(var)
+                    if pts is not None and len(pts) > 0:
+                        pts = np.array(pts, dtype=np.float32).reshape(-1, 2) / sf
+                        bx = int(pts[:, 0].min())
+                        by = int(pts[:, 1].min())
+                        bw = int(pts[:, 0].max()) - bx
+                        bh = int(pts[:, 1].max()) - by
+                        if bw > 0 and bh > 0:
+                            raw_results.append((d_text.strip() if d_text else "[QR Code Detected]", (bx, by, bw, bh)))
+                except Exception:
+                    pass
+
+                # detect() only to locate points even if Reed-Solomon decoding fails
+                try:
+                    ret, pts = det.detect(var)
+                    if ret and pts is not None and len(pts) > 0:
+                        pts = np.array(pts, dtype=np.float32).reshape(-1, 2) / sf
+                        bx = int(pts[:, 0].min())
+                        by = int(pts[:, 1].min())
+                        bw = int(pts[:, 0].max()) - bx
+                        bh = int(pts[:, 1].max()) - by
+                        if bw > 0 and bh > 0:
+                            raw_results.append(("[QR Code Detected]", (bx, by, bw, bh)))
+                except Exception:
+                    pass
+
+        # 3. Visual 2D checkerboard/QR matrix texture heatmap analysis
+        lap = cv2.Laplacian(gray, cv2.CV_32F)
+        step = 8
+        size = 40
+        if h >= size and w >= size:
+            heatmap = np.zeros((h // step, w // step), dtype=np.float32)
+            for yi, y in enumerate(range(0, h - size, step)):
+                for xi, x in enumerate(range(0, w - size, step)):
+                    patch = gray[y:y+size, x:x+size]
+                    gx = np.std(cv2.Sobel(patch, cv2.CV_32F, 1, 0))
+                    gy = np.std(cv2.Sobel(patch, cv2.CV_32F, 0, 1))
+                    ratio = min(gx, gy) / (max(gx, gy) + 1e-5)
+                    if ratio < 0.65 or min(gx, gy) < 25:
+                        continue
+                    
+                    _, p_bin = cv2.threshold(patch, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+                    trans_h = np.sum(np.abs(np.diff(p_bin.astype(np.int32), axis=1)) > 0) / float(size * size)
+                    trans_v = np.sum(np.abs(np.diff(p_bin.astype(np.int32), axis=0)) > 0) / float(size * size)
+                    if min(trans_h, trans_v) < 0.12 or max(trans_h, trans_v) > 0.45:
+                        continue
+                    
+                    black_pct = np.mean(p_bin < 128)
+                    if not (0.25 <= black_pct <= 0.75):
+                        continue
+
+                    l_std = np.std(lap[y:y+size, x:x+size])
+                    if l_std < 100:
+                        continue
+                        
+                    heatmap[yi, xi] = l_std * ratio
+
+            if heatmap.max() >= 120:
+                hot = (heatmap > 100).astype(np.uint8) * 255
+                hot_scaled = cv2.resize(hot, (w, h), interpolation=cv2.INTER_NEAREST)
+                contours, _ = cv2.findContours(hot_scaled, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+                for c in contours:
+                    x, y, bw, bh = cv2.boundingRect(c)
+                    px = max(0, x - 4)
+                    py = max(0, y - 4)
+                    pw = min(w - px, bw + 8)
+                    ph = min(h - py, bh + 8)
+                    aspect = pw / float(ph)
+                    if 0.5 <= aspect <= 2.0 and pw * ph >= 900:
+                        crop_patch = gray[py:py+ph, px:px+pw]
+                        crop_scaled = cv2.resize(crop_patch, (0, 0), fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
+                        decoded_crop = ""
+                        if _HAS_PYZBAR:
+                            try:
+                                p_res = pyzbar.decode(crop_scaled, symbols=[pyzbar.ZBarSymbol.QRCODE])
+                                if p_res:
+                                    decoded_crop = p_res[0].data.decode("utf-8", errors="replace").strip()
+                            except Exception:
+                                pass
+                        if not decoded_crop and hasattr(cv2, "QRCodeDetectorAruco"):
+                            try:
+                                det_ar = cv2.QRCodeDetectorAruco()
+                                txt, _, _ = det_ar.detectAndDecode(crop_scaled)
+                                if txt:
+                                    decoded_crop = txt.strip()
+                            except Exception:
+                                pass
+                        val = decoded_crop if decoded_crop else "[QR Code Detected]"
+                        raw_results.append((val, (px, py, pw, ph)))
+
+        def _boxes_overlap(b1: tuple[int, int, int, int], b2: tuple[int, int, int, int], threshold: float = 0.25) -> bool:
+            xA = max(b1[0], b2[0])
+            yA = max(b1[1], b2[1])
+            xB = min(b1[0] + b1[2], b2[0] + b2[2])
+            yB = min(b1[1] + b1[3], b2[1] + b2[3])
+            iw = max(0, xB - xA)
+            ih = max(0, yB - yA)
+            if iw <= 0 or ih <= 0:
+                return False
+            ia = iw * ih
+            a1 = b1[2] * b1[3]
+            a2 = b2[2] * b2[3]
+            return (ia / float(a1 + 1e-6) > threshold) or (ia / float(a2 + 1e-6) > threshold)
+
+        # Prioritize detections with actual decoded content over generic placeholder
+        raw_results.sort(
+            key=lambda r: (r[0] != "[QR Code Detected]" and not r[0].startswith("[") and len(r[0]) > 0),
+            reverse=True,
+        )
+
+        final_results: list[tuple[str, tuple[int, int, int, int]]] = []
+        for val, box in raw_results:
+            overlap = False
+            for f_val, f_box in final_results:
+                if _boxes_overlap(box, f_box):
+                    overlap = True
+                    break
+            if not overlap:
+                final_results.append((val, box))
+
+        return final_results
 
     try:
         results = _run_with_timeout(_call, DETECT_TIMEOUT_S)
-    except Exception:
+    except Exception as exc:
+        logger.exception("QR detection failed or timed out: %s", exc)
         return []
 
+    detections = []
     seen: set[str] = set()
-    for data, points in results:
-        if data in seen:
+    for data, (x, y, w, h) in results:
+        x = max(0, x)
+        y = max(0, y)
+        w = max(1, w)
+        h = max(1, h)
+
+        key = f"{data}:{x // 10}:{y // 10}"
+        if key in seen:
             continue
-        seen.add(data)
-        pts = np.array(points, dtype=np.float32).reshape(-1, 2)
-        x = int(pts[:, 0].min())
-        y = int(pts[:, 1].min())
-        w = int(pts[:, 0].max()) - x
-        h = int(pts[:, 1].max()) - y
-        # Truncate very long QR payloads for the label
-        short = data if len(data) <= 60 else data[:57] + "…"
+        seen.add(key)
+
+        if data and not data.startswith("["):
+            short = data if len(data) <= 60 else data[:57] + "…"
+            label = f"QR: {short}"
+        else:
+            label = "QR Code"
+
         detections.append(Detection(
             kind="qr",
-            label=f"QR: {short}",
+            label=label,
             value=data,
-            box=(x, y, max(w, 1), max(h, 1)),
+            box=(x, y, w, h),
         ))
 
     return detections
+
 
 
 # ── Face detector ─────────────────────────────────────────────────────────────

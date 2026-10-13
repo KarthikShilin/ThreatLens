@@ -776,5 +776,79 @@ class TestScanRobustnessAndDetection:
             assert res.risk == "Low"
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# QR Code Detection Tests
+# ══════════════════════════════════════════════════════════════════════════════
+
+_SAMPLE_QR_PNG_B64 = (
+    "iVBORw0KGgoAAAANSUhEUgAAAGQAAABkAQMAAABKLAcXAAAABlBMVEX///8AAABVwtN+AAAACXBIWXMAAA7E"
+    "AAAOxAGVKw4bAAAA2ElEQVQ4jZ2T0RHDMAhDxQRsYK+YDbIqbMAEVsG9ay8/PVN95f1gIgngoZsMhLuTtJ90"
+    "ARExhhikRYwAvMZ4lxgL8gcphniXcmsq61M6VC7Fw7MzKikx7ZPFGd0MUucaqQ4hVCtNG2jRFbW2LGDkBud0"
+    "q2rApq/t0jEp0p6gTTp/05XxEZC1/69BKGN8CVdtfU5li0o+b9Ki6plO7sY0qFR9sbK0Qe+eVa/907oTql4r"
+    "9pTt0jHVkErmnUqLGJLBs02RqQDTW1R3m3dELunQdinfnd8rPqKHXrfv8Wkj8p0mAAAAAElFTkSuQmCC"
+)
 
 
+class TestQRCodeDetection:
+    """Tests for QR code detection, decoding, findings, and scene robustness."""
+
+    def test_clean_qr_code_detected_and_decoded(self):
+        """Standard valid QR code image must be detected and decoded."""
+        import base64
+        from image_scan import scan_image, scan_result_to_dict
+
+        raw = base64.b64decode(_SAMPLE_QR_PNG_B64)
+        result = scan_image(raw)
+
+        assert result.error is None
+        assert result.risk in ("Medium", "High")
+        qr_dets = [d for d in result.detections if d.kind == "qr"]
+        assert len(qr_dets) >= 1
+        assert "threatlens.test" in qr_dets[0].value
+        assert qr_dets[0].box[2] > 0 and qr_dets[0].box[3] > 0
+
+        d = scan_result_to_dict(result)
+        assert d["clean"] is False
+
+    def test_qr_code_finding_structure(self):
+        """QR detections generate findings with explanation and remediation advice."""
+        import base64
+        from image_scan import scan_image
+
+        raw = base64.b64decode(_SAMPLE_QR_PNG_B64)
+        result = scan_image(raw)
+
+        qr_findings = [f for f in result.findings if f.get("kind") == "qr"]
+        assert len(qr_findings) == 1
+        f = qr_findings[0]
+        assert "QR Code" in f["title"]
+        assert "sensitive" in f["plain_explanation"].lower() or "qr" in f["plain_explanation"].lower()
+        assert "remove" in f["recommended_fix"].lower() or "obscure" in f["recommended_fix"].lower()
+
+    def test_clean_image_has_no_qr_detections(self):
+        """An image without any QR codes must report zero QR detections."""
+        from image_scan import scan_image
+
+        raw = _make_png_bytes(80, 80)
+        result = scan_image(raw)
+
+        assert result.error is None
+        qr_dets = [d for d in result.detections if d.kind == "qr"]
+        assert len(qr_dets) == 0
+
+    def test_qr_code_in_scene_detected(self):
+        """A QR code placed inside a larger canvas/scene must be detected."""
+        import base64
+        import cv2
+        import numpy as np
+        from image_scan import _detect_qr
+
+        raw = base64.b64decode(_SAMPLE_QR_PNG_B64)
+        qr_img = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
+
+        scene = np.ones((400, 400, 3), dtype=np.uint8) * 220
+        scene[150:250, 150:250] = qr_img
+
+        dets = _detect_qr(scene)
+        assert len(dets) >= 1
+        assert dets[0].kind == "qr"
