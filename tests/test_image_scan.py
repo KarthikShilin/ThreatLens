@@ -852,3 +852,34 @@ class TestQRCodeDetection:
         dets = _detect_qr(scene)
         assert len(dets) >= 1
         assert dets[0].kind == "qr"
+
+    def test_textured_image_without_qr_has_no_false_positive(self):
+        """A photo with textured gradients, hair, and clothing must not produce false QR detections."""
+        import cv2
+        import numpy as np
+        from image_scan import _detect_qr
+
+        # Create a synthetic image with complex textures (circles, gradients, noise)
+        img = np.zeros((300, 300, 3), dtype=np.uint8)
+        cv2.circle(img, (150, 150), 80, (200, 180, 150), -1)
+        cv2.circle(img, (150, 100), 50, (40, 30, 20), -1)  # hair-like dark circle
+        # Add gradient bands
+        for i in range(150, 300, 10):
+            cv2.line(img, (50, i), (250, i), (255, 255, 255), 3)
+
+        dets = _detect_qr(img)
+        assert len(dets) == 0
+
+    def test_bogus_out_of_bounds_quad_rejected(self):
+        """Quads outside the image bounds or with non-square aspect ratios are rejected."""
+        import numpy as np
+        from image_scan import _is_valid_qr_quad
+
+        gray = np.ones((500, 500), dtype=np.uint8) * 128
+        # Quad with point out of bounds
+        bogus_pts = np.array([[100, 100], [400, 100], [400, -200], [100, 400]], dtype=np.float32)
+        assert _is_valid_qr_quad(bogus_pts, (500, 500), gray) is False
+
+        # Quad with wildly non-square aspect ratio (0.2)
+        narrow_pts = np.array([[100, 100], [120, 100], [120, 400], [100, 400]], dtype=np.float32)
+        assert _is_valid_qr_quad(narrow_pts, (500, 500), gray) is False
