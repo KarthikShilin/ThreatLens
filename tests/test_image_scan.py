@@ -363,3 +363,295 @@ class TestScanImageEndToEnd:
         from image_scan import scan_image
         result = scan_image(b"\x00\x01\x02\x03garbage")
         assert result.error is not None
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# EXIF Risk Tiers & Findings Tests
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestExifTiersAndFindings:
+    """Tests for EXIF tier classification, risk bumping, findings, and clean flag."""
+
+    def _make_jpeg_with_gps(self, width: int = 20, height: int = 20) -> bytes:
+        from PIL import Image, ExifTags
+        buf = io.BytesIO()
+        img = Image.new("RGB", (width, height), color=(100, 150, 200))
+        ex = img.getexif()
+        gps = ex.get_ifd(ExifTags.IFD.GPSInfo)
+        gps[1] = "N"
+        gps[2] = (12.0, 34.0, 56.0)
+        gps[3] = "E"
+        gps[4] = (77.0, 22.0, 33.0)
+        gps[6] = 120.5
+        img.save(buf, format="JPEG", exif=ex)
+        return buf.getvalue()
+
+    def _make_jpeg_with_info_only(self, width: int = 20, height: int = 20) -> bytes:
+        from PIL import Image
+        buf = io.BytesIO()
+        img = Image.new("RGB", (width, height), color=(100, 150, 200))
+        ex = img.getexif()
+        ex[271] = "Canon"                    # Make
+        ex[272] = "EOS R5"                   # Model
+        ex[305] = "ThreatLens Camera App"    # Software
+        ex[306] = "2024:05:01 14:30:00"      # DateTime
+        img.save(buf, format="JPEG", exif=ex)
+        return buf.getvalue()
+
+    def _make_jpeg_with_serial_and_artist(self, width: int = 20, height: int = 20) -> bytes:
+        from PIL import Image
+        buf = io.BytesIO()
+        img = Image.new("RGB", (width, height), color=(100, 150, 200))
+        ex = img.getexif()
+        ex[315] = "Jane Photographer"        # Artist
+        sub = ex.get_ifd(34665)              # Exif IFD
+        sub[42033] = "SN-987654321"          # BodySerialNumber
+        img.save(buf, format="JPEG", exif=ex)
+        return buf.getvalue()
+
+    def test_image_with_gps_exif(self):
+        """Image with GPS EXIF: risk High, a GPS finding appears, clean == false."""
+        from image_scan import scan_image, scan_result_to_dict
+        raw = self._make_jpeg_with_gps()
+        result = scan_image(raw)
+
+        assert result.error is None
+        assert result.risk == "High"
+        assert result.exif.get("has_sensitive") is True
+        assert bool(result.exif.get("gps")) is True
+
+        # Finding exists and has plain language explanation + fix
+        gps_findings = [
+            f for f in result.findings
+            if f.get("kind") in ("gps", "exif_gps") or "gps" in f.get("title", "").lower()
+        ]
+        assert len(gps_findings) >= 1
+        finding = gps_findings[0]
+        assert "gps" in finding["plain_explanation"].lower() or "coordinates" in finding["plain_explanation"].lower()
+        assert "remove metadata" in finding["recommended_fix"].lower()
+
+        # Clean flag must be False
+        d = scan_result_to_dict(result)
+        assert d["clean"] is False
+
+        # EXIF fields marked with high tier and sensitive=True
+        gps_fields = [f for f in result.exif.get("fields", []) if f.get("tier") == "high"]
+        assert len(gps_fields) >= 2
+        assert all(f["sensitive"] is True for f in gps_fields)
+
+    def test_image_with_only_make_model_datetime(self):
+        """Image with only Make/Model/DateTime: risk stays Low, shown as info."""
+        from image_scan import scan_image, scan_result_to_dict
+        raw = self._make_jpeg_with_info_only()
+        result = scan_image(raw)
+
+        assert result.error is None
+        assert result.risk == "Low"
+        assert result.exif.get("has_sensitive") is False
+        assert len(result.findings) == 0
+
+        # Clean flag must be True (no detections, no sensitive EXIF)
+        d = scan_result_to_dict(result)
+        assert d["clean"] is True
+
+        # All fields are tier 'info' and sensitive=False
+        fields = result.exif.get("fields", [])
+        assert len(fields) >= 3
+        tags = {f["tag"] for f in fields}
+        assert "Make" in tags
+        assert "Model" in tags
+        assert "DateTime" in tags
+        assert all(f["tier"] == "info" for f in fields)
+        assert all(f["sensitive"] is False for f in fields)
+
+    def test_image_with_serial_number_or_artist(self):
+        """Image with serial number or Artist: risk Medium, clean == false."""
+        from image_scan import scan_image, scan_result_to_dict
+        raw = self._make_jpeg_with_serial_and_artist()
+        result = scan_image(raw)
+
+        assert result.error is None
+        assert result.risk == "Medium"
+        assert result.exif.get("has_sensitive") is True
+
+        # Plain language device/creator finding
+        med_findings = [
+            f for f in result.findings
+            if f.get("kind") in ("exif_meta", "exif_device") or "device" in f.get("title", "").lower() or "creator" in f.get("title", "").lower()
+        ]
+        assert len(med_findings) >= 1
+        finding = med_findings[0]
+        assert "remove metadata" in finding["recommended_fix"].lower()
+
+        # Clean flag must be False
+        d = scan_result_to_dict(result)
+        assert d["clean"] is False
+
+        # Marked with tier 'medium' and sensitive=True
+        med_fields = [f for f in result.exif.get("fields", []) if f.get("tier") == "medium"]
+        assert len(med_fields) >= 2
+        assert all(f["sensitive"] is True for f in med_fields)
+
+    def test_image_with_no_exif_png(self):
+        """Image with no EXIF (e.g. PNG): empty EXIF list, no crash, clean == true."""
+        from image_scan import scan_image, scan_result_to_dict
+        raw = _make_png_bytes(25, 25)
+        result = scan_image(raw)
+
+        assert result.error is None
+        assert result.risk == "Low"
+        assert result.exif.get("fields") == []
+        assert result.exif.get("has_sensitive") is False
+        assert len(result.findings) == 0
+
+        d = scan_result_to_dict(result)
+        assert d["clean"] is True
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# /strip-exif Function & Route Tests
+# ══════════════════════════════════════════════════════════════════════════════
+
+class TestStripExif:
+    """strip_exif and /strip-exif endpoint tests."""
+
+    def test_strip_exif_output_has_zero_exif_and_same_dimensions(self):
+        """strip_exif removes all EXIF while maintaining image dimensions and format."""
+        from PIL import Image, ExifTags
+        from image_scan import strip_exif, _extract_exif
+
+        width, height = 48, 36
+        buf = io.BytesIO()
+        img = Image.new("RGB", (width, height), color=(120, 180, 240))
+        ex = img.getexif()
+        gps = ex.get_ifd(ExifTags.IFD.GPSInfo)
+        gps[1] = "N"
+        gps[2] = (10.0, 20.0, 30.0)
+        ex[271] = "Sony"
+        ex[315] = "Photographer"
+        img.save(buf, format="JPEG", exif=ex)
+        raw = buf.getvalue()
+
+        cleaned_bytes, media_type, ext = strip_exif(raw)
+        assert media_type == "image/jpeg"
+        assert ext == ".jpg"
+
+        # Check with PIL
+        cleaned_img = Image.open(io.BytesIO(cleaned_bytes))
+        assert cleaned_img.size == (width, height)
+        assert dict(cleaned_img.getexif()) == {}
+
+        # Check with _extract_exif
+        extracted = _extract_exif(cleaned_img)
+        assert extracted["fields"] == []
+        assert extracted["gps"] == {}
+        assert extracted["has_sensitive"] is False
+
+    def test_strip_exif_png_and_webp(self):
+        """strip_exif properly handles PNG and WebP files."""
+        from PIL import Image, ExifTags
+        from image_scan import strip_exif
+
+        # PNG
+        png_raw = _make_png_bytes(32, 24)
+        c_png, m_png, ext_png = strip_exif(png_raw)
+        assert m_png == "image/png"
+        assert ext_png == ".png"
+        p_img = Image.open(io.BytesIO(c_png))
+        assert p_img.size == (32, 24)
+        assert dict(p_img.getexif()) == {}
+
+        # WebP
+        w_buf = io.BytesIO()
+        w_orig = Image.new("RGB", (28, 28), color=(90, 80, 70))
+        ex = w_orig.getexif()
+        ex[271] = "WebP Camera"
+        w_orig.save(w_buf, format="WEBP", exif=ex)
+        c_webp, m_webp, ext_webp = strip_exif(w_buf.getvalue())
+        assert m_webp == "image/webp"
+        assert ext_webp == ".webp"
+        w_img = Image.open(io.BytesIO(c_webp))
+        assert w_img.size == (28, 28)
+        assert dict(w_img.getexif()) == {}
+
+    def test_strip_exif_rejects_non_image(self):
+        """strip_exif raises ValueError when passed invalid/non-image bytes."""
+        from image_scan import strip_exif
+        with pytest.raises(ValueError, match="Not a valid image"):
+            strip_exif(b"hello world this is plain text")
+
+    def test_strip_exif_rejects_oversized_file(self):
+        """strip_exif raises ValueError when file exceeds 5 MB limit."""
+        from image_scan import strip_exif
+        with pytest.raises(ValueError, match="5 MB"):
+            strip_exif(b"X" * (5 * 1024 * 1024 + 1))
+
+    def test_strip_exif_route_endpoint(self):
+        """POST /strip-exif endpoint cleans image, returns 200 download, and handles errors."""
+        import asyncio
+        from PIL import Image, ExifTags
+        from starlette.datastructures import UploadFile
+        from main import strip_exif_route, Request
+
+        # 1. Valid image with GPS
+        w_buf = io.BytesIO()
+        img = Image.new("RGB", (40, 25), color=(200, 100, 50))
+        ex = img.getexif()
+        gps = ex.get_ifd(ExifTags.IFD.GPSInfo)
+        gps[1] = "S"
+        gps[2] = (33.0, 44.0, 55.0)
+        img.save(w_buf, format="JPEG", exif=ex)
+
+        req = Request({"type": "http", "client": ("127.0.0.1", 54321), "headers": []})
+        uf = UploadFile(filename="vacation_photo.jpg", file=io.BytesIO(w_buf.getvalue()))
+
+        resp = asyncio.run(strip_exif_route(req, uf))
+        assert resp.status_code == 200
+        assert resp.headers.get("content-type") == "image/jpeg"
+        assert 'filename="cleaned_vacation_photo.jpg"' in resp.headers.get("content-disposition", "")
+
+        out_img = Image.open(io.BytesIO(resp.body))
+        assert out_img.size == (40, 25)
+        assert dict(out_img.getexif()) == {}
+
+        # 2. Non-image upload -> 422
+        uf_bad = UploadFile(filename="malicious.txt", file=io.BytesIO(b"fake data not an image"))
+        resp_bad = asyncio.run(strip_exif_route(req, uf_bad))
+        assert resp_bad.status_code == 422
+
+        # 3. Oversized file -> 413
+        uf_big = UploadFile(filename="huge.jpg", file=io.BytesIO(b"0" * (5 * 1024 * 1024 + 1)))
+        resp_big = asyncio.run(strip_exif_route(req, uf_big))
+        assert resp_big.status_code == 413
+
+    def test_scan_and_report_routes_intact(self):
+        """Ensure /scan and /report routes in main.py remain intact."""
+        import asyncio
+        import json
+        from main import scan, generate_report, Request
+
+        # /scan with SSRF target returns 400
+        req_scan = Request({"type": "http", "client": ("127.0.0.1", 54322), "headers": []})
+        res_scan = scan("http://127.0.0.1", req_scan)
+        assert res_scan.status_code == 400
+
+        # /report returns PDF streaming response
+        req_report = Request({"type": "http", "client": ("127.0.0.1", 54323), "headers": [(b"content-type", b"application/json")]})
+        body = json.dumps({
+            "url": "https://example.com",
+            "tech_detected": {},
+            "headers": {},
+            "vulnerabilities": {},
+            "summary": {"overall_risk": "Low", "what_we_checked": "Checked headers", "top_findings": []},
+            "security_headers": [],
+        }).encode("utf-8")
+
+        async def rec():
+            return {"type": "http.request", "body": body}
+        req_report._receive = rec
+
+        res_report = asyncio.run(generate_report(req_report))
+        assert res_report.status_code == 200
+        assert res_report.media_type == "application/pdf"
+
+

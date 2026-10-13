@@ -8,7 +8,7 @@ import io
 from collections import defaultdict
 
 from fastapi import FastAPI, Request, UploadFile, File
-from fastapi.responses import StreamingResponse, JSONResponse, FileResponse
+from fastapi.responses import StreamingResponse, JSONResponse, FileResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from reportlab.lib.pagesizes import A4
@@ -23,7 +23,7 @@ from scan import (
     check_security_headers, build_summary, SSRFError, validate_target,
     SECURITY_HEADERS, _clamp_severity,
 )
-from image_scan import scan_image, scan_result_to_dict
+from image_scan import scan_image, scan_result_to_dict, strip_exif
 
 # Load .env (optional)
 try:
@@ -557,3 +557,57 @@ async def scan_image_route(request: Request, file: UploadFile = File(...)):
         return JSONResponse(payload, status_code=422)
 
     return JSONResponse(payload)
+
+
+# ── /strip-exif ───────────────────────────────────────────────────────────────
+@app.post("/strip-exif")
+async def strip_exif_route(request: Request, file: UploadFile = File(...)):
+    """
+    Accepts a JPEG/PNG/WebP upload; removes all EXIF and metadata in-memory,
+    and returns the cleaned image as a download with matching file format.
+    """
+    # Per-IP rate limit (shared quota with /scan and /scan-image)
+    client_ip = request.client.host if request.client else "unknown"
+    if not _check_rate_limit(client_ip):
+        return JSONResponse(
+            {"error": "Too many requests. Please wait a minute before scanning again."},
+            status_code=429,
+        )
+
+    # Content-length pre-check
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > IMAGE_MAX_BYTES + 8192:
+                return JSONResponse({"error": "File too large. Maximum is 5 MB."}, status_code=413)
+        except ValueError:
+            pass
+
+    # Read upload into memory — never write to disk
+    try:
+        raw = await file.read(IMAGE_MAX_BYTES + 1)
+    except Exception:
+        return JSONResponse({"error": "Failed to read uploaded file."}, status_code=400)
+
+    if len(raw) > IMAGE_MAX_BYTES:
+        return JSONResponse({"error": "File too large. Maximum is 5 MB."}, status_code=413)
+
+    if len(raw) == 0:
+        return JSONResponse({"error": "Empty file received."}, status_code=400)
+
+    try:
+        cleaned_bytes, media_type, ext = strip_exif(raw)
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=422)
+    except Exception:
+        return JSONResponse({"error": "Failed to process image."}, status_code=422)
+
+    orig_name = os.path.basename(file.filename or f"image{ext}")
+    base_stem, _ = os.path.splitext(orig_name)
+    download_filename = f"cleaned_{base_stem}{ext}"
+
+    return Response(
+        content=cleaned_bytes,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{download_filename}"'},
+    )

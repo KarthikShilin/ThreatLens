@@ -46,7 +46,7 @@
     nav {
       border-bottom: 1px solid var(--border);
       padding: 1.4rem 0;
-      margin-bottom: 5rem;
+      margin-bottom: 0;
     }
 
     nav .page {
@@ -977,7 +977,7 @@
     .main-panel {
       flex: 1;
       min-width: 0;
-      padding: 0 2rem;
+      padding: 3.5rem 2rem;
       border-left: 1px solid var(--border);
       min-height: calc(100vh - 80px);
     }
@@ -1179,6 +1179,8 @@
     .dot-qr    { background: #50c8ff; }
     .dot-vreg  { background: #ffb41e; }
     .dot-face  { background: #64dc78; }
+    .dot-gps, .dot-exif_gps { background: #ff5050; }
+    .dot-exif_meta, .dot-exif_device, .dot-exif { background: #ffb41e; }
     .img-finding-exp {
       font-size: 0.79rem;
       color: var(--muted);
@@ -1351,6 +1353,13 @@
     <div class="main-panel">
 
 
+    <!-- HERO -->
+    <section class="hero" id="heroSection">
+      <div class="eyebrow">Security Scanner</div>
+      <h1>Surface what's<br/><em>hiding</em> in your stack.</h1>
+      <p>Scan websites for CVE vulnerabilities and HTTP header<br>misconfigurations — or upload an image to detect sensitive<br>information before sharing.</p>
+    </section>
+
     <!-- SCAN BOX -->
     <div class="scan-box" id="urlScanBox">
       <div style="display:flex;gap:0.6rem;">
@@ -1501,6 +1510,15 @@
 
       <!-- Results -->
       <div id="imgResults">
+
+        <!-- Meta + Cleaned Download -->
+        <div class="results-bar" id="imgResultsBar" style="display:none;">
+          <span class="results-target" id="imgResultsMeta"></span>
+          <button class="btn-download" id="imgDownloadCleanedBtn" onclick="downloadCleanedImage()">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download cleaned image
+          </button>
+        </div>
 
         <!-- View toggle -->
         <div class="view-toggle-bar" id="imgViewToggleBar">
@@ -1929,6 +1947,9 @@
     $('sideTabUrl').classList.toggle('active', tab === 'url');
     $('sideTabImg').classList.toggle('active', tab === 'image');
 
+    // Show/hide hero only on URL tab
+    $('heroSection').style.display = tab === 'url' ? 'block' : 'none';
+
     $('imgPanel').style.display = tab === 'image' ? 'block' : 'none';
 
     // Show/hide URL scanner box by its ID
@@ -2003,6 +2024,7 @@
     $('imgPreviewEl').src = '';
     $('imgScanBtn').disabled = true;
     $('imgResults').style.display = 'none';
+    if ($('imgResultsBar')) $('imgResultsBar').style.display = 'none';
     $('imgFileInput').value = '';
     hideImgError();
   }
@@ -2065,17 +2087,38 @@
     // Clean message
     $('imgCleanMsg').style.display = data.clean ? 'block' : 'none';
 
+    // Results bar (Download cleaned image)
+    const exif = data.exif || {};
+    const hasExif = Boolean(exif.fields && exif.fields.length > 0);
+    const resultsBar = $('imgResultsBar');
+    const cleanedBtn = $('imgDownloadCleanedBtn');
+    if (resultsBar && cleanedBtn) {
+      if (hasExif) {
+        resultsBar.style.display = 'flex';
+        cleanedBtn.style.display = 'inline-flex';
+        if ($('imgResultsMeta') && _imgFile) {
+          $('imgResultsMeta').textContent = _imgFile.name;
+        }
+      } else {
+        resultsBar.style.display = 'none';
+        cleanedBtn.style.display = 'none';
+      }
+    }
+
     // Summary line
     const findings = data.findings || [];
     const dets = data.detections || [];
-    const exif = data.exif || {};
     if (dets.length > 0 || (exif.fields && exif.fields.length > 0)) {
       const exifNote = (exif.fields && exif.fields.length > 0)
         ? ` · ${exif.fields.length} EXIF field${exif.fields.length !== 1 ? 's' : ''}${ exif.has_sensitive ? ' (⚠ sensitive)' : ''}` : '';
-      $('imgFindingsSummary').textContent =
-        dets.length > 0
-          ? `${dets.length} detection${dets.length !== 1 ? 's' : ''} across ${findings.length} category${findings.length !== 1 ? 'ies' : 'y'}${exifNote}`
-          : `No PII detections${exifNote}`;
+      if (dets.length > 0) {
+        $('imgFindingsSummary').textContent =
+          `${dets.length} detection${dets.length !== 1 ? 's' : ''} across ${findings.length} category${findings.length !== 1 ? 'ies' : 'y'}${exifNote}`;
+      } else if (findings.length > 0) {
+        $('imgFindingsSummary').textContent = `${findings.length} finding${findings.length !== 1 ? 's' : ''}${exifNote}`;
+      } else {
+        $('imgFindingsSummary').textContent = `No PII detections${exifNote}`;
+      }
     } else {
       $('imgFindingsSummary').textContent = '';
     }
@@ -2092,7 +2135,7 @@
     $('imgResults').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
-  const _kindLabel = { phone: 'Phone', qr: 'QR Code', vreg: 'Plate', face: 'Face' };
+  const _kindLabel = { phone: 'Phone', qr: 'QR Code', vreg: 'Plate', face: 'Face', gps: 'GPS', exif_gps: 'GPS', exif_meta: 'Metadata', exif_device: 'Metadata' };
 
   function _renderImgSimple(findings, clean) {
     const grid = $('imgFindingsGrid');
@@ -2191,7 +2234,7 @@
             <tbody>
               ${sensitiveFields.map(f => `
                 <tr>
-                  <td class="exif-key">${esc(f.tag)}<span class="exif-sensitive">sensitive</span></td>
+                  <td class="exif-key">${esc(f.tag)}<span class="exif-sensitive">${esc(f.tier || 'sensitive')}</span></td>
                   <td class="exif-val">${esc(f.value)}</td>
                 </tr>`).join('')}
             </tbody>
@@ -2225,6 +2268,45 @@
     $('imgBtnTech').classList.toggle('active', view === 'technical');
     $('imgSimpleView').style.display = view === 'simple' ? 'block' : 'none';
     $('imgTechView').style.display = view === 'technical' ? 'block' : 'none';
+  }
+
+  /* ── Download cleaned image ── */
+  async function downloadCleanedImage() {
+    if (!_imgFile) return;
+    const btn = $('imgDownloadCleanedBtn');
+    if (!btn) return;
+    btn.disabled = true;
+    const origHtml = btn.innerHTML;
+    btn.innerHTML = `<div class="spinner" style="display:inline-block;border-top-color:#3ecf6e;width:12px;height:12px;margin-right:6px;"></div>Cleaning…`;
+    try {
+      const fd = new FormData();
+      fd.append('file', _imgFile);
+      const resp = await fetch(`${API_BASE}/strip-exif`, {
+        method: 'POST',
+        body: fd
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ error: 'Stripping EXIF failed' }));
+        throw new Error(err.error || `HTTP ${resp.status}`);
+      }
+      const blob = await resp.blob();
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      let filename = `cleaned_${_imgFile.name}`;
+      const disp = resp.headers.get('Content-Disposition');
+      if (disp && disp.includes('filename=')) {
+        const match = disp.match(/filename="?([^"]+)"?/);
+        if (match && match[1]) filename = match[1];
+      }
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    } catch (err) {
+      showImgError('Download cleaned image failed: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = origHtml;
+    }
   }
 </script>
 </body>

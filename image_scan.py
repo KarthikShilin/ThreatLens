@@ -493,22 +493,39 @@ def _build_risk_and_findings(detections: list[Detection]) -> tuple[str, list[dic
 
 # ── EXIF extraction ───────────────────────────────────────────────────────────
 
-# EXIF tag IDs considered privacy-sensitive
-_SENSITIVE_TAG_NAMES = {
-    "GPSInfo", "GPSLatitude", "GPSLongitude", "GPSAltitude",
-    "GPSLatitudeRef", "GPSLongitudeRef", "GPSTimeStamp", "GPSDateStamp",
-    "GPSProcessingMethod", "GPSMeasureMode",
-    "Make", "Model", "Software",
-    "Artist", "Copyright", "ImageDescription",
-    "CameraSerialNumber", "BodySerialNumber", "LensSerialNumber",
-    "DateTime", "DateTimeOriginal", "DateTimeDigitized",
-    "HostComputer", "XPAuthor", "XPComment",
+# EXIF classification tiers
+# HIGH: GPS data (latitude/longitude/altitude)
+# MEDIUM: device/camera/lens serial numbers, Artist, XPAuthor, Copyright,
+#         ImageDescription, XPComment, HostComputer
+# INFO ONLY: Make, Model, Software, DateTime*, etc. (shown in table, no risk bump)
+
+_MEDIUM_EXIF_TAGS = {
+    "Artist",
+    "XPAuthor",
+    "Copyright",
+    "ImageDescription",
+    "XPComment",
+    "HostComputer",
+    "CameraSerialNumber",
+    "BodySerialNumber",
+    "LensSerialNumber",
+    "SerialNumber",
 }
 
 # Human-readable GPS tag map (inside GPSInfo IFD)
 _GPS_TAG_MAP: dict[int, str] = {
     t: name for name, t in ExifTags.GPSTAGS.items()
 }
+
+
+def _classify_exif_tag(tag_name: str) -> str:
+    """Return 'high', 'medium', or 'info' for an EXIF tag name."""
+    if tag_name.startswith("GPS") or tag_name == "GPSInfo":
+        return "high"
+    lower = tag_name.lower()
+    if tag_name in _MEDIUM_EXIF_TAGS or "serialnumber" in lower or "serial_number" in lower:
+        return "medium"
+    return "info"
 
 
 def _rational_to_float(val: Any) -> float:
@@ -537,11 +554,31 @@ def _gps_dms_to_decimal(dms: Any, ref: str) -> Optional[float]:
         return None
 
 
+def _format_raw_exif_val(raw_val: Any) -> str:
+    """Convert rational / bytes / tuples to clean display text."""
+    try:
+        if isinstance(raw_val, bytes):
+            display = raw_val.decode("utf-8", errors="replace").strip("\x00")
+        elif hasattr(raw_val, 'numerator'):
+            display = str(_rational_to_float(raw_val))
+        elif isinstance(raw_val, tuple):
+            display = ", ".join(str(_rational_to_float(v)) if hasattr(v, 'numerator') else str(v)
+                               for v in raw_val)
+        else:
+            display = str(raw_val)
+    except Exception:
+        display = repr(raw_val)
+
+    if len(display) > 200:
+        display = display[:197] + "…"
+    return display
+
+
 def _extract_exif(pil_img: Image.Image) -> dict:
     """
     Extract all EXIF tags from a PIL image.
     Returns a dict with:
-      - 'fields':  list of {tag, value, sensitive} records
+      - 'fields':  list of {tag, value, sensitive, tier} records
       - 'gps':     {lat, lon, alt, map_url} if GPS present, else {}
       - 'has_sensitive': bool
     """
@@ -561,12 +598,29 @@ def _extract_exif(pil_img: Image.Image) -> dict:
     }
 
     gps_ifd: dict = {}
+    seen_tags: set[str] = set()
 
+    def _process_tag(tag_name: str, raw_val: Any):
+        if tag_name in seen_tags:
+            return
+        seen_tags.add(tag_name)
+
+        display = _format_raw_exif_val(raw_val)
+        tier = _classify_exif_tag(tag_name)
+        sensitive = tier in ("high", "medium")
+
+        result["fields"].append({
+            "tag":       tag_name,
+            "value":     display,
+            "sensitive": sensitive,
+            "tier":      tier,
+        })
+
+    # 1. Main IFD
     for tag_id, raw_val in exif_data.items():
         tag_name = tag_name_map.get(tag_id, f"Tag_{tag_id}")
 
-        if tag_name == "GPSInfo":
-            # raw_val may already be a dict from getexif()
+        if tag_name == "GPSInfo" or tag_id == 34853:
             try:
                 if isinstance(raw_val, dict):
                     gps_ifd = raw_val
@@ -574,44 +628,44 @@ def _extract_exif(pil_img: Image.Image) -> dict:
                     gps_ifd = dict(exif_data.get_ifd(tag_id))
             except Exception:
                 pass
-            continue   # handled separately below
+            continue
 
-        # Convert rational / bytes / tuples to clean python types
+        if tag_name in ("ExifOffset", "Exif IFD") or tag_id == 34665:
+            # Sub-IFD handled below
+            continue
+
+        _process_tag(tag_name, raw_val)
+
+    # 2. Exif sub-IFD (tag 34665)
+    try:
+        sub_exif = exif_data.get_ifd(34665)
+        if sub_exif:
+            for sub_tag_id, sub_raw in sub_exif.items():
+                sub_name = tag_name_map.get(sub_tag_id, f"Tag_{sub_tag_id}")
+                if sub_name == "GPSInfo" or sub_tag_id == 34853:
+                    if not gps_ifd:
+                        try:
+                            gps_ifd = dict(sub_raw) if isinstance(sub_raw, dict) else dict(exif_data.get_ifd(34853))
+                        except Exception:
+                            pass
+                    continue
+                _process_tag(sub_name, sub_raw)
+    except Exception:
+        pass
+
+    # 3. GPS IFD
+    if not gps_ifd:
         try:
-            if isinstance(raw_val, bytes):
-                display = raw_val.decode("utf-8", errors="replace").strip("\x00")
-            elif hasattr(raw_val, 'numerator'):
-                display = str(_rational_to_float(raw_val))
-            elif isinstance(raw_val, tuple):
-                display = ", ".join(str(_rational_to_float(v)) if hasattr(v, 'numerator') else str(v)
-                                   for v in raw_val)
-            else:
-                display = str(raw_val)
+            gps_ifd = dict(exif_data.get_ifd(34853))
         except Exception:
-            display = repr(raw_val)
+            pass
 
-        # Truncate very long values
-        if len(display) > 200:
-            display = display[:197] + "…"
-
-        sensitive = tag_name in _SENSITIVE_TAG_NAMES
-        if sensitive:
-            result["has_sensitive"] = True
-
-        result["fields"].append({
-            "tag":       tag_name,
-            "value":     display,
-            "sensitive": sensitive,
-        })
-
-    # ── GPS IFD ───────────────────────────────────────────────────────────────
     if gps_ifd:
-        result["has_sensitive"] = True
-        lat_val  = gps_ifd.get(2)   # GPSLatitude
+        lat_val  = gps_ifd.get(2)      # GPSLatitude
         lat_ref  = gps_ifd.get(1, '')  # GPSLatitudeRef
-        lon_val  = gps_ifd.get(4)   # GPSLongitude
+        lon_val  = gps_ifd.get(4)      # GPSLongitude
         lon_ref  = gps_ifd.get(3, '')  # GPSLongitudeRef
-        alt_val  = gps_ifd.get(6)   # GPSAltitude
+        alt_val  = gps_ifd.get(6)      # GPSAltitude
 
         lat = _gps_dms_to_decimal(lat_val, str(lat_ref)) if lat_val else None
         lon = _gps_dms_to_decimal(lon_val, str(lon_ref)) if lon_val else None
@@ -629,24 +683,89 @@ def _extract_exif(pil_img: Image.Image) -> dict:
                 "map_url": f"https://maps.google.com/?q={lat},{lon}",
             }
             # Add GPS fields to the field list for display
-            result["fields"].append({"tag": "GPS Latitude",  "value": f"{lat}°",  "sensitive": True})
-            result["fields"].append({"tag": "GPS Longitude", "value": f"{lon}°",  "sensitive": True})
+            result["fields"].append({"tag": "GPS Latitude",  "value": f"{lat}°",  "sensitive": True, "tier": "high"})
+            result["fields"].append({"tag": "GPS Longitude", "value": f"{lon}°",  "sensitive": True, "tier": "high"})
             if alt is not None:
-                result["fields"].append({"tag": "GPS Altitude", "value": f"{alt} m", "sensitive": True})
+                result["fields"].append({"tag": "GPS Altitude", "value": f"{alt} m", "sensitive": True, "tier": "high"})
         else:
-            # Log raw GPS tags even if we couldn't parse coords
             for gps_tag_id, gps_raw in gps_ifd.items():
                 gps_name = _GPS_TAG_MAP.get(gps_tag_id, f"GPS_{gps_tag_id}")
-                try:
-                    gps_display = str(gps_raw)
-                except Exception:
-                    gps_display = repr(gps_raw)
-                result["fields"].append({"tag": gps_name, "value": gps_display[:200], "sensitive": True})
+                gps_display = _format_raw_exif_val(gps_raw)
+                result["fields"].append({"tag": gps_name, "value": gps_display, "sensitive": True, "tier": "high"})
 
-    # Sort: sensitive fields first
-    result["fields"].sort(key=lambda f: (0 if f["sensitive"] else 1, f["tag"]))
+    # Determine if any sensitive metadata exists
+    result["has_sensitive"] = any(f["tier"] in ("high", "medium") for f in result["fields"]) or bool(result.get("gps"))
+
+    # Sort: high tier first, then medium, then info, then alphabetically by tag
+    tier_order = {"high": 0, "medium": 1, "info": 2}
+    result["fields"].sort(key=lambda f: (tier_order.get(f.get("tier"), 2), f["tag"]))
 
     return result
+
+
+# ── In-memory EXIF Stripper ───────────────────────────────────────────────────
+def strip_exif(raw_bytes: bytes) -> tuple[bytes, str, str]:
+    """
+    Remove all metadata (EXIF, ICC profile, XMP, comments) from image bytes
+    by re-encoding pixel data only.
+    Processed fully in memory; never touches disk.
+
+    Returns (cleaned_bytes, media_type, file_extension).
+    Raises ValueError on invalid or oversized images.
+    """
+    if len(raw_bytes) > MAX_BYTES:
+        raise ValueError("File exceeds 5 MB limit.")
+    if len(raw_bytes) == 0:
+        raise ValueError("Empty file received.")
+
+    try:
+        pil = Image.open(io.BytesIO(raw_bytes))
+        pil.verify()
+    except Exception as exc:
+        raise ValueError(f"Not a valid image: {exc}") from exc
+
+    try:
+        pil = Image.open(io.BytesIO(raw_bytes))
+        pil.load()
+    except Exception as exc:
+        raise ValueError(f"Failed to decode image pixels: {exc}") from exc
+
+    if pil.width * pil.height > MAX_PIXELS:
+        raise ValueError(f"Image resolution exceeds maximum allowable dimensions ({MAX_PIXELS} px).")
+
+    fmt = pil.format
+    if not fmt:
+        raise ValueError("Unrecognized image format.")
+    fmt_upper = fmt.upper()
+    if fmt_upper not in ("JPEG", "PNG", "WEBP"):
+        raise ValueError(f"Unsupported image format: {fmt}. Only JPEG, PNG, and WebP are supported.")
+
+    mode = pil.mode
+    if fmt_upper == "JPEG" and mode not in ("RGB", "L"):
+        clean_img = pil.convert("RGB")
+    else:
+        clean_img = Image.new(mode, pil.size)
+        clean_img.paste(pil)
+
+    clean_img.info.clear()
+
+    out_buf = io.BytesIO()
+    save_kwargs = {}
+    if fmt_upper == "JPEG":
+        save_kwargs["quality"] = 95
+        media_type = "image/jpeg"
+        ext = ".jpg"
+    elif fmt_upper == "PNG":
+        media_type = "image/png"
+        ext = ".png"
+    elif fmt_upper == "WEBP":
+        media_type = "image/webp"
+        ext = ".webp"
+    else:
+        raise ValueError(f"Unsupported image format: {fmt}")
+
+    clean_img.save(out_buf, format=fmt_upper, **save_kwargs)
+    return out_buf.getvalue(), media_type, ext
 
 
 # ── Public API ────────────────────────────────────────────────────────────────
@@ -664,7 +783,6 @@ def scan_image(raw_bytes: bytes) -> ScanResult:
     all_detections: list[Detection] = []
 
     # ── EXIF extraction (before any downscaling side-effects) ─────────────────
-    # Re-open original bytes to get EXIF before thumbnail resize strips metadata
     exif_data: dict = {}
     try:
         pil_orig = Image.open(io.BytesIO(raw_bytes))
@@ -687,14 +805,49 @@ def scan_image(raw_bytes: bytes) -> ScanResult:
     # ── Risk + findings ───────────────────────────────────────────────────────
     risk, findings = _build_risk_and_findings(all_detections)
 
-    # Bump risk if sensitive EXIF metadata was found
-    if exif_data.get("has_sensitive"):
+    # ── EXIF findings & risk bump ─────────────────────────────────────────────
+    has_high_exif = (
+        bool(exif_data.get("gps")) or
+        any(f.get("tier") == "high" for f in exif_data.get("fields", []))
+    )
+    has_medium_exif = any(f.get("tier") == "medium" for f in exif_data.get("fields", []))
+
+    if has_high_exif:
+        risk = "High"
+        gps_vals = []
+        if exif_data.get("gps") and exif_data["gps"].get("lat") is not None:
+            gps = exif_data["gps"]
+            coord_str = f"{gps['lat']}°, {gps['lon']}°"
+            if gps.get("alt") is not None:
+                coord_str += f" ({gps['alt']} m)"
+            gps_vals.append(coord_str)
+        else:
+            for f in exif_data.get("fields", []):
+                if f.get("tier") == "high":
+                    gps_vals.append(f"{f['tag']}: {f['value']}")
+
+        findings.append({
+            "kind":              "gps",
+            "title":             "GPS Location Data Detected",
+            "plain_explanation": "This photo contains GPS coordinates that may reveal where it was taken.",
+            "recommended_fix":   "Remove metadata before sharing.",
+            "values":            gps_vals,
+            "count":             len(gps_vals) if gps_vals else 1,
+        })
+
+    if has_medium_exif:
         if risk == "Low":
             risk = "Medium"
-        # GPS data is especially serious
-        if exif_data.get("gps"):
-            if risk in ("Low", "Medium"):
-                risk = "High"
+        med_fields = [f for f in exif_data.get("fields", []) if f.get("tier") == "medium"]
+        med_vals = [f"{f['tag']}: {f['value']}" for f in med_fields]
+        findings.append({
+            "kind":              "exif_meta",
+            "title":             "Device & Creator Metadata Detected",
+            "plain_explanation": "This photo contains device serial numbers or creator information that may identify your device or personal identity.",
+            "recommended_fix":   "Remove metadata before sharing.",
+            "values":            med_vals,
+            "count":             len(med_vals),
+        })
 
     # ── Annotated image ───────────────────────────────────────────────────────
     try:
@@ -717,9 +870,10 @@ def scan_result_to_dict(result: ScanResult) -> dict:
     if result.error:
         return {"error": result.error}
 
+    has_sensitive_exif = bool(result.exif.get("has_sensitive", False))
     return {
-        "risk":      result.risk,
-        "findings":  result.findings,
+        "risk":            result.risk,
+        "findings":        result.findings,
         "detections": [
             {
                 "kind":  d.kind,
@@ -730,6 +884,6 @@ def scan_result_to_dict(result: ScanResult) -> dict:
             for d in result.detections
         ],
         "annotated_image": result.annotated_b64,
-        "clean": len(result.detections) == 0,
-        "exif": result.exif,
+        "clean":           len(result.detections) == 0 and not has_sensitive_exif,
+        "exif":            result.exif,
     }
