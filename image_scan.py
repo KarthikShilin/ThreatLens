@@ -16,9 +16,12 @@ from __future__ import annotations
 
 import base64
 import io
+import json
 import logging
 import os
 import re
+import subprocess
+import sys
 import time
 import threading
 from dataclasses import dataclass, field
@@ -157,6 +160,7 @@ def _run_with_timeout(fn, timeout: float):
 # ── OCR ───────────────────────────────────────────────────────────────────────
 _ocr_lock = threading.Lock()
 _ocr_engine = None
+_OCR_WORKER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ocr_worker.py")
 
 
 def _get_ocr():
@@ -165,7 +169,11 @@ def _get_ocr():
         if _ocr_engine is None:
             try:
                 from rapidocr_onnxruntime import RapidOCR
-                _ocr_engine = RapidOCR()
+                inst = RapidOCR()
+                if os.path.isfile(_OCR_WORKER_PATH):
+                    _ocr_engine = True
+                else:
+                    _ocr_engine = inst
             except Exception as exc:
                 logger.exception("Failed to initialize RapidOCR engine: %s", exc)
                 _ocr_engine = False   # sentinel: unavailable
@@ -176,19 +184,75 @@ def _run_ocr(cv_img: np.ndarray) -> list[tuple[list, str, float]]:
     """
     Returns list of (box_points, text, confidence).
     box_points is a list of 4 [x,y] corner points.
+    Caps resolution to 1024px to prevent out-of-memory crashes on memory-constrained servers.
+    Executes in a separate subprocess to insulate the main web server process against
+    native C++ segfaults or access violations.
     """
     ocr = _get_ocr()
     if not ocr:
         return []
 
-    def _call():
-        result, _ = ocr(cv_img)
-        return result or []
+    h, w = cv_img.shape[:2]
+    max_dim = max(h, w)
+    scale = 1.0
+    ocr_img = cv_img
+    if max_dim > 1024:
+        scale = 1024.0 / max_dim
+        new_w = max(int(w * scale), 1)
+        new_h = max(int(h * scale), 1)
+        ocr_img = cv2.resize(cv_img, (new_w, new_h), interpolation=cv2.INTER_AREA)
 
-    try:
-        return _run_with_timeout(_call, OCR_TIMEOUT_S)
-    except Exception:
+    raw_result = []
+    # If a callable is directly provided (e.g., mocked in unit tests), run in-process
+    if callable(ocr):
+        def _call():
+            result, _ = ocr(ocr_img)
+            return result or []
+        try:
+            raw_result = _run_with_timeout(_call, OCR_TIMEOUT_S)
+        except Exception as exc:
+            logger.warning("In-process OCR call failed: %s", exc)
+            return []
+    else:
+        # Run isolated in subprocess
+        try:
+            success, enc = cv2.imencode(".png", ocr_img)
+            if not success:
+                return []
+            proc = subprocess.run(
+                [sys.executable, _OCR_WORKER_PATH],
+                input=enc.tobytes(),
+                capture_output=True,
+                timeout=OCR_TIMEOUT_S,
+            )
+            if proc.returncode != 0:
+                logger.warning(
+                    "OCR subprocess crashed or exited with code %s: %s",
+                    proc.returncode,
+                    proc.stderr.decode("utf-8", errors="replace"),
+                )
+                return []
+            raw_result = json.loads(proc.stdout.decode("utf-8"))
+        except Exception as exc:
+            logger.warning("OCR subprocess execution failed: %s", exc)
+            return []
+
+    if not raw_result:
         return []
+
+    if scale != 1.0:
+        inv_scale = 1.0 / scale
+        scaled_result = []
+        for item in raw_result:
+            try:
+                box, text, score = item[0], item[1], item[2]
+                scaled_box = [[float(pt[0]) * inv_scale, float(pt[1]) * inv_scale] for pt in box]
+                scaled_result.append((scaled_box, text, score))
+            except Exception:
+                scaled_result.append(item)
+        return scaled_result
+
+    return raw_result
 
 
 def _ocr_result_to_text(ocr_result) -> str:

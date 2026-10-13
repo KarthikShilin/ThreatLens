@@ -5,5 +5,5 @@ reportlab
 python-dotenv
 python-multipart
 Pillow
-opencv-python-headless
+opencv-python
 rapidocr-onnxruntime

@@ -740,5 +740,41 @@ class TestScanRobustnessAndDetection:
             payload = json.loads(resp.body)
             assert payload == {"error": "Internal error scanning image"}
 
+    def test_subprocess_ocr_crash_isolation(self):
+        """When the OCR subprocess crashes (e.g. access violation / segfault), scan_image does not crash."""
+        import subprocess
+        import unittest.mock as mock
+        import image_scan
+
+        png_bytes = _make_png_bytes(30, 30)
+        image_scan._ocr_engine = True
+
+        mock_proc = mock.Mock()
+        mock_proc.returncode = 3221225477  # 0xC0000005 Windows Access Violation
+        mock_proc.stderr = b"Fatal Python error: Segmentation fault / Access Violation"
+        mock_proc.stdout = b""
+
+        with mock.patch("subprocess.run", return_value=mock_proc):
+            res = image_scan.scan_image(png_bytes)
+            assert res.error is None
+            assert res.risk == "Low"
+            d = image_scan.scan_result_to_dict(res)
+            assert d["clean"] is True
+
+    def test_subprocess_ocr_timeout_isolation(self):
+        """When the OCR subprocess times out, scan_image does not raise and completes safely."""
+        import subprocess
+        import unittest.mock as mock
+        import image_scan
+
+        png_bytes = _make_png_bytes(30, 30)
+        image_scan._ocr_engine = True
+
+        with mock.patch("subprocess.run", side_effect=subprocess.TimeoutExpired(cmd="ocr_worker", timeout=20)):
+            res = image_scan.scan_image(png_bytes)
+            assert res.error is None
+            assert res.risk == "Low"
+
+
 
 
