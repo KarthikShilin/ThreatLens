@@ -38,7 +38,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 # ── FIX 4a: CORS from environment ─────────────────────────────────────────────
 _raw_origins = os.environ.get(
     "ALLOWED_ORIGINS",
-    "http://127.0.0.1:8000,http://localhost:8000"
+    "http://127.0.0.1:8000,http://localhost:8000,http://127.0.0.1:5500,http://localhost:5500,http://127.0.0.1:3000,http://localhost:3000,null"
 )
 ALLOWED_ORIGINS = [o.strip() for o in _raw_origins.split(",") if o.strip()]
 
@@ -76,9 +76,19 @@ app = FastAPI(title="ThreatLens API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$",
     allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    allow_headers=["*"],
 )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    logging.exception("Unhandled server exception: %s", exc)
+    return JSONResponse(
+        {"error": f"Internal server error: {str(exc)}"},
+        status_code=500,
+    )
 
 # ── Serve frontend ────────────────────────────────────────────────────────────
 @app.get("/", include_in_schema=False)
@@ -616,3 +626,8 @@ async def strip_exif_route(request: Request, file: UploadFile = File(...)):
         media_type=media_type,
         headers={"Content-Disposition": f'attachment; filename="{download_filename}"'},
     )
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
