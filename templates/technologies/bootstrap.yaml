@@ -1,0 +1,29 @@
+id: bootstrap-detect
+info:
+  name: Bootstrap Framework
+  author: ThreatLens
+  severity: info
+  description: Detects presence of Bootstrap and extracts version.
+  metadata:
+    tech: Bootstrap
+    cpe: cpe:2.3:a:getbootstrap:bootstrap
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+    matchers-condition: or
+    matchers:
+      - type: regex
+        part: body
+        regex:
+          - "bootstrap[./-]([\\d.]+)"
+          - "bootstrap\\.min\\.css"
+          - "bootstrap\\.min\\.js"
+    extractors:
+      - type: regex
+        part: body
+        name: version
+        group: 1
+        regex:
+          - "bootstrap[./-]([\\d.]+)"

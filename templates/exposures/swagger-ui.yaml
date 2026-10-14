@@ -1,0 +1,28 @@
+id: swagger-api-docs-exposure
+info:
+  name: Swagger / OpenAPI Documentation Exposure
+  author: ThreatLens
+  severity: LOW
+  description: Detects publicly accessible API documentation interfaces (Swagger UI / OpenAPI).
+  tags:
+    - exposure
+    - api
+    - swagger
+  metadata:
+    category: exposures
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/docs"
+      - "{{BaseURL}}/swagger-ui.html"
+      - "{{BaseURL}}/openapi.json"
+    matchers-condition: or
+    matchers:
+      - type: word
+        part: body
+        words:
+          - "swagger-ui"
+          - "Swagger UI"
+          - "\"openapi\":"
+        condition: or

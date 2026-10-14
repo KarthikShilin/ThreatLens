@@ -1,0 +1,32 @@
+id: laravel-detect
+info:
+  name: Laravel Framework
+  author: ThreatLens
+  severity: info
+  description: Detects Laravel via cookies or body markers.
+  metadata:
+    tech: Laravel
+    cpe: cpe:2.3:a:laravel:laravel
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+    matchers-condition: or
+    matchers:
+      - type: word
+        part: header.set-cookie
+        words:
+          - "laravel_session"
+      - type: regex
+        part: body
+        regex:
+          - "laravel_session"
+          - "window\\.Laravel"
+    extractors:
+      - type: regex
+        part: body
+        name: version
+        group: 1
+        regex:
+          - "laravel[./-]([\\d.]+)"

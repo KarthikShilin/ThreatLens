@@ -1,0 +1,29 @@
+id: joomla-detect
+info:
+  name: Joomla CMS
+  author: ThreatLens
+  severity: info
+  description: Detects presence of Joomla CMS and extracts version.
+  metadata:
+    tech: Joomla
+    cpe: "cpe:2.3:a:joomla:joomla\\!"
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+    matchers-condition: or
+    matchers:
+      - type: regex
+        part: body
+        regex:
+          - "/media/jui/"
+          - "Joomla!"
+          - "name=\"generator\" content=\"Joomla! ([\\d.]+)\""
+    extractors:
+      - type: regex
+        part: body
+        name: version
+        group: 1
+        regex:
+          - "name=\"generator\" content=\"Joomla! ([\\d.]+)\""

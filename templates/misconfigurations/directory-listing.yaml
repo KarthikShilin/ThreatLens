@@ -1,0 +1,28 @@
+id: directory-listing-detect
+info:
+  name: Web Directory Index Listing
+  author: ThreatLens
+  severity: MEDIUM
+  description: Detects directory indexing enabled on the web server, which can expose private files and directory trees.
+  tags:
+    - misconfig
+    - directory-listing
+  metadata:
+    category: misconfigurations
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: regex
+        part: body
+        regex:
+          - "<title>Index of /"
+          - "<h1>Index of /"
+          - "\\[To Parent Directory\\]"
+        condition: or

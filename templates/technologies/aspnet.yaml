@@ -1,0 +1,35 @@
+id: aspnet-detect
+info:
+  name: ASP.NET Framework
+  author: ThreatLens
+  severity: info
+  description: Detects ASP.NET via cookies or headers.
+  metadata:
+    tech: ASP.NET
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+    matchers-condition: or
+    matchers:
+      - type: regex
+        part: header.set-cookie
+        regex:
+          - "ASP\\.NET_SessionId"
+          - "ASPSESSIONID"
+      - type: regex
+        part: header.x-aspnet-version
+        regex:
+          - "([\\d.]+)"
+      - type: word
+        part: header.x-powered-by
+        words:
+          - "ASP.NET"
+    extractors:
+      - type: regex
+        part: header.x-aspnet-version
+        name: version
+        group: 1
+        regex:
+          - "([\\d.]+)"

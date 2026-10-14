@@ -1,0 +1,30 @@
+id: php-detect
+info:
+  name: PHP Runtime
+  author: ThreatLens
+  severity: info
+  description: Detects PHP runtime via session cookies or X-Powered-By header.
+  metadata:
+    tech: PHP
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+    matchers-condition: or
+    matchers:
+      - type: word
+        part: header.set-cookie
+        words:
+          - "PHPSESSID"
+      - type: regex
+        part: header.x-powered-by
+        regex:
+          - "PHP/?([\\d.]+)?"
+    extractors:
+      - type: regex
+        part: header.x-powered-by
+        name: version
+        group: 1
+        regex:
+          - "PHP/([\\d.]+)"

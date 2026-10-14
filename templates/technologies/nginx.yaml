@@ -1,0 +1,27 @@
+id: nginx-detect
+info:
+  name: Nginx Web Server
+  author: ThreatLens
+  severity: info
+  description: Detects Nginx web server and extracts version.
+  metadata:
+    tech: nginx
+    cpe: cpe:2.3:a:nginx:nginx
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+    matchers-condition: or
+    matchers:
+      - type: regex
+        part: header.server
+        regex:
+          - "nginx"
+    extractors:
+      - type: regex
+        part: header.server
+        name: version
+        group: 1
+        regex:
+          - "nginx/([\\d.]+)"

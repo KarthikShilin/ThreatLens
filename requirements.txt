@@ -8,3 +8,4 @@ Pillow
 opencv-python
 rapidocr-onnxruntime
 pyzbar
+pyyaml

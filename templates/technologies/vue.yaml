@@ -1,0 +1,29 @@
+id: vue-detect
+info:
+  name: Vue.js Framework
+  author: ThreatLens
+  severity: info
+  description: Detects presence of Vue.js and extracts version.
+  metadata:
+    tech: Vue
+    cpe: cpe:2.3:a:vuejs:vue.js
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+    matchers-condition: or
+    matchers:
+      - type: regex
+        part: body
+        regex:
+          - "vue[./-]([\\d.]+)"
+          - "Vue\\.js"
+          - "data-v-[a-f0-9]"
+    extractors:
+      - type: regex
+        part: body
+        name: version
+        group: 1
+        regex:
+          - "vue[./-]([\\d.]+)"

@@ -1,0 +1,32 @@
+id: jquery-detect
+info:
+  name: jQuery Library
+  author: ThreatLens
+  severity: info
+  description: Detects presence of jQuery library and extracts version.
+  metadata:
+    tech: jQuery
+    cpe: cpe:2.3:a:jquery:jquery
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+    matchers-condition: or
+    matchers:
+      - type: regex
+        part: body
+        regex:
+          - "jquery[./-]([\\d.]+)"
+      - type: word
+        part: body
+        words:
+          - "jquery.min.js"
+          - "jquery.js"
+    extractors:
+      - type: regex
+        part: body
+        name: version
+        group: 1
+        regex:
+          - "jquery[./-]([\\d.]+)"

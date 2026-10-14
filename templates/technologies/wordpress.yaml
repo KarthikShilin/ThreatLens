@@ -1,0 +1,30 @@
+id: wordpress-detect
+info:
+  name: WordPress CMS
+  author: ThreatLens
+  severity: info
+  description: Detects presence of WordPress CMS and extracts version from generator meta tag.
+  metadata:
+    tech: WordPress
+    cpe: cpe:2.3:a:wordpress:wordpress
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+    matchers-condition: or
+    matchers:
+      - type: regex
+        part: body
+        regex:
+          - "/wp-content/"
+          - "/wp-includes/"
+          - "name=\"generator\" content=\"WordPress ([\\d.]+)\""
+    extractors:
+      - type: regex
+        part: body
+        name: version
+        group: 1
+        regex:
+          - "name=\"generator\" content=\"WordPress ([\\d.]+)\""
+          - "ver=([\\d.]+)"

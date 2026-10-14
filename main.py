@@ -124,6 +124,17 @@ def scan(url: str, request: Request):
     if tech_result.get("tech_stack"):
         vulnerabilities = map_vulnerabilities(tech_result["tech_stack"])
 
+    # Merge direct vulnerabilities discovered by the scanner engine
+    if tech_result.get("direct_vulnerabilities"):
+        for comp, items in tech_result["direct_vulnerabilities"].items():
+            if comp not in vulnerabilities:
+                vulnerabilities[comp] = []
+            existing_ids = {c.get("id") for c in vulnerabilities[comp] if c.get("id")}
+            for item in items:
+                if item.get("id") not in existing_ids:
+                    vulnerabilities[comp].append(item)
+                    existing_ids.add(item.get("id"))
+
     headers: dict = {}
     try:
         headers = get_headers(url)
@@ -140,6 +151,7 @@ def scan(url: str, request: Request):
         tech_result.get("tech_stack", {}),
         vulnerabilities,
         security_header_findings,
+        tech_result.get("nuclei_matches", []),
     )
 
     return {
@@ -147,6 +159,7 @@ def scan(url: str, request: Request):
         "headers":          headers,
         "vulnerabilities":  vulnerabilities,
         "security_headers": security_header_findings,
+        "security_checks":  tech_result.get("nuclei_matches", []),
         "summary":          summary,
     }
 

@@ -1,0 +1,26 @@
+id: env-file-exposure
+info:
+  name: Environment Variables File (.env) Exposure
+  author: ThreatLens
+  severity: CRITICAL
+  description: Detects an exposed .env file leaking database credentials, API keys, or secret tokens.
+  tags:
+    - exposure
+    - config
+    - credentials
+  metadata:
+    category: exposures
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/.env"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: regex
+        part: body
+        regex:
+          - "(DB_PASSWORD|DATABASE_URL|APP_KEY|SECRET_KEY|AWS_SECRET_ACCESS_KEY)="

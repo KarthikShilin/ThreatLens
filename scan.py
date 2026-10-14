@@ -5,10 +5,18 @@ import os
 import socket
 import ipaddress
 import time
+import subprocess
+import shutil
+import tempfile
 import requests
 from html.parser import HTMLParser
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from urllib.parse import urlparse, urljoin
+
+from engine import NucleiEngine
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 
 # Load .env if present (python-dotenv is optional — graceful fallback if not installed)
 try:
@@ -90,6 +98,22 @@ CPE_PREFIX = {
     "nginx":     "cpe:2.3:a:nginx:nginx",
     "Apache":    "cpe:2.3:a:apache:http_server",
 }
+
+# ── Nuclei Template Engine Instance ───────────────────────────────────────────
+nuclei_engine = NucleiEngine(template_dirs=[
+    os.path.join(TEMPLATES_DIR, "technologies"),
+    os.path.join(TEMPLATES_DIR, "exposures"),
+    os.path.join(TEMPLATES_DIR, "misconfigurations"),
+    os.path.join(TEMPLATES_DIR, "headers"),
+    TEMPLATES_DIR,
+])
+try:
+    nuclei_engine.load_templates()
+    for _tpl in nuclei_engine.templates:
+        if _tpl.cpe and _tpl.tech not in CPE_PREFIX:
+            CPE_PREFIX[_tpl.tech] = _tpl.cpe
+except Exception:
+    pass
 
 # ── Security headers ──────────────────────────────────────────────────────────
 SECURITY_HEADERS = {
@@ -267,8 +291,311 @@ class _TechHTMLParser(HTMLParser):
                 self.meta["generator"] = a.get("content", "")
 
 
-def scan_tech(url: str) -> dict:
-    """Detect tech stack using SSRF-safe HTTP request + HTML parsing."""
+NUCLEI_BIN_PATH = os.environ.get(
+    "NUCLEI_BIN_PATH",
+    os.path.join(BASE_DIR, "bin", "nuclei.exe" if os.name == "nt" else "nuclei"),
+)
+COMMUNITY_TEMPLATES_DIR = os.environ.get(
+    "NUCLEI_TEMPLATES_DIR",
+    os.path.expanduser("~/nuclei-templates"),
+)
+USE_NUCLEI_CLI = os.environ.get("USE_NUCLEI_CLI", "true").lower() in ("true", "1", "yes")
+
+KNOWN_CANONICAL = {
+    "wordpress": "WordPress",
+    "nginx": "nginx",
+    "apache": "Apache",
+    "apache httpd": "Apache",
+    "php": "PHP",
+    "drupal": "Drupal",
+    "joomla": "Joomla",
+    "next.js": "Next.js",
+    "nextjs": "Next.js",
+    "react": "React",
+    "vue": "Vue",
+    "angular": "Angular",
+    "jquery": "jQuery",
+    "bootstrap": "Bootstrap",
+    "laravel": "Laravel",
+    "django": "Django",
+    "cloudflare": "Cloudflare",
+    "google-tag-manager": "Google Tag Manager",
+    "google-font-api": "Google Fonts",
+    "akismet": "Akismet",
+    "gutenberg": "Gutenberg",
+    "jetpack": "Jetpack",
+    "translatepress": "TranslatePress",
+}
+
+
+def _clean_tech_name(raw_name: str, tpl_id: str, matcher_name: str, metadata: dict, tags: list | None = None) -> str | None:
+    if not raw_name:
+        return None
+    tags = tags or []
+    t_lower = tpl_id.lower()
+    if any(k in t_lower for k in ("exposure", "disclosure", "leak", "misconfig", "robots", "security-txt", "policy", "tls", "ssl")):
+        return None
+
+    raw_lower = raw_name.lower().strip()
+    if raw_lower in KNOWN_CANONICAL:
+        return KNOWN_CANONICAL[raw_lower]
+
+    if "product" in metadata and metadata["product"]:
+        prod = str(metadata["product"]).strip()
+        if prod.lower() in KNOWN_CANONICAL:
+            return KNOWN_CANONICAL[prod.lower()]
+        return prod.title()
+
+    if matcher_name:
+        mn_lower = matcher_name.lower().replace("generic", "").strip()
+        if mn_lower in KNOWN_CANONICAL:
+            return KNOWN_CANONICAL[mn_lower]
+
+    cleaned = re.sub(
+        r"\s+(?:Detection|Detect|CMS|Framework|Server|Protection|Service|Disclosure|Exposure|Information|File|Policy)\b.*$",
+        "",
+        raw_name,
+        flags=re.IGNORECASE,
+    ).strip()
+    cleaned = re.sub(r"['\"]", "", cleaned)
+    if cleaned.lower() in KNOWN_CANONICAL:
+        return KNOWN_CANONICAL[cleaned.lower()]
+
+    if cleaned.lower() in ("waf", "metatag", "tech", "plugin", "general", "matcher", "robots", "security", "policy", "file"):
+        return None
+
+    return cleaned.title() if len(cleaned) > 2 else cleaned.upper()
+
+
+def run_nuclei_cli(url: str, timeout: int = 35) -> tuple[dict, list, dict]:
+    """
+    Execute the official Nuclei CLI engine against `url`.
+    Returns:
+        (tech_stack, security_matches, vulnerabilities)
+    """
+    bin_path = NUCLEI_BIN_PATH
+    if not (bin_path and os.path.exists(bin_path)):
+        bin_path = shutil.which("nuclei")
+    if not bin_path or not os.path.exists(bin_path):
+        return {}, [], {}
+
+    phase1_dirs: list[str] = []
+    if os.path.isdir(COMMUNITY_TEMPLATES_DIR):
+        for sub in ["http/technologies", "ssl"]:
+            full_sub = os.path.join(COMMUNITY_TEMPLATES_DIR, sub)
+            if os.path.exists(full_sub):
+                phase1_dirs.append(full_sub)
+    if os.path.isdir(TEMPLATES_DIR):
+        phase1_dirs.append(TEMPLATES_DIR)
+
+    phase2_dirs: list[str] = []
+    if os.path.isdir(COMMUNITY_TEMPLATES_DIR):
+        for sub in ["http/misconfiguration", "http/exposures", "http/vulnerabilities", "http/default-logins"]:
+            full_sub = os.path.join(COMMUNITY_TEMPLATES_DIR, sub)
+            if os.path.exists(full_sub):
+                phase2_dirs.append(full_sub)
+
+    if not phase1_dirs and not phase2_dirs:
+        return {}, [], {}
+
+    lines: list[str] = []
+    out_file = None
+    try:
+        # ── Phase 1: Rapid Technology, SSL & Custom Templates ─────────────
+        if phase1_dirs:
+            fd, out_file = tempfile.mkstemp(suffix=".jsonl")
+            os.close(fd)
+
+            cmd1 = [
+                bin_path,
+                "-target", url,
+                "-jsonl",
+                "-silent",
+                "-no-stdin",
+                "-duc",
+                "-ni",
+                "-nmhe",
+                "-c", "30",
+                "-rl", "50",
+                "-timeout", "4",
+                "-o", out_file,
+            ]
+            for tpl in phase1_dirs:
+                cmd1.extend(["-t", tpl])
+
+            proc1 = subprocess.Popen(
+                cmd1,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            try:
+                proc1.wait(timeout=min(20, timeout))
+            except subprocess.TimeoutExpired:
+                proc1.kill()
+                try:
+                    proc1.wait(timeout=2)
+                except Exception:
+                    pass
+
+            if os.path.exists(out_file):
+                with open(out_file, "r", encoding="utf-8", errors="replace") as f:
+                    lines.extend([l.strip() for l in f if l.strip()])
+                try:
+                    os.remove(out_file)
+                except Exception:
+                    pass
+                out_file = None
+
+        # ── Phase 2: Misconfigurations & Exposures ────────────────────────
+        if phase2_dirs and timeout > 20:
+            fd, out_file = tempfile.mkstemp(suffix=".jsonl")
+            os.close(fd)
+
+            cmd2 = [
+                bin_path,
+                "-target", url,
+                "-jsonl",
+                "-silent",
+                "-no-stdin",
+                "-duc",
+                "-ni",
+                "-nmhe",
+                "-c", "30",
+                "-rl", "50",
+                "-timeout", "4",
+                "-o", out_file,
+            ]
+            for tpl in phase2_dirs:
+                cmd2.extend(["-t", tpl])
+
+            proc2 = subprocess.Popen(
+                cmd2,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            try:
+                proc2.wait(timeout=timeout - 20)
+            except subprocess.TimeoutExpired:
+                proc2.kill()
+                try:
+                    proc2.wait(timeout=2)
+                except Exception:
+                    pass
+
+            if os.path.exists(out_file):
+                with open(out_file, "r", encoding="utf-8", errors="replace") as f:
+                    lines.extend([l.strip() for l in f if l.strip()])
+
+        tech_stack: dict[str, list[str]] = {}
+        security_matches: list[dict] = []
+        vulnerabilities: dict[str, list[dict]] = {}
+        seen_template_ids: set[str] = set()
+
+        for line in lines:
+            try:
+                item = json.loads(line)
+            except Exception:
+                continue
+
+            tpl_id = item.get("template-id", "")
+            info = item.get("info", {})
+            name = info.get("name", tpl_id)
+            severity = (info.get("severity") or "INFO").upper()
+            desc = info.get("description", "")
+            tags = info.get("tags", [])
+            matched_at = item.get("matched-at", item.get("url", url))
+            extracted = item.get("extracted-results", [])
+            version = str(extracted[0]).strip() if extracted else "detected"
+            matcher_name = item.get("matcher-name", "")
+            metadata = info.get("metadata", {})
+
+            # Tech detection
+            raw = None
+            if tpl_id.startswith("wordpress-"):
+                parts = tpl_id.split("-")
+                sub = parts[1] if len(parts) > 1 else "wordpress"
+                raw = "WordPress" if sub in ("detect", "passive") else sub
+            elif matcher_name and "waf-detect" in tpl_id:
+                raw = matcher_name
+            elif matcher_name and "tech-detect" in tpl_id:
+                raw = matcher_name
+            else:
+                raw = name
+
+            canon_tech = _clean_tech_name(raw, tpl_id, matcher_name, metadata, tags=tags)
+            if canon_tech:
+                has_digits = bool(re.search(r"\d", version))
+                if canon_tech not in tech_stack:
+                    tech_stack[canon_tech] = [version]
+                else:
+                    existing = tech_stack[canon_tech]
+                    if existing == ["detected"] and has_digits:
+                        tech_stack[canon_tech] = [version]
+                    elif has_digits and version not in existing:
+                        tech_stack[canon_tech].append(version)
+
+            cpe = None
+            for tag in tags:
+                if isinstance(tag, str) and tag.startswith("cpe:"):
+                    cpe = tag
+                    break
+
+            classification = info.get("classification", {})
+            cve_ids = classification.get("cve-id") or []
+            if isinstance(cve_ids, str):
+                cve_ids = [cve_ids]
+
+            match_item = {
+                "template_id": tpl_id,
+                "name": name,
+                "tech": canon_tech or "General",
+                "severity": severity,
+                "category": item.get("type", "http"),
+                "tags": tags,
+                "matched_at": matched_at,
+                "description": desc,
+                "version": version,
+                "cpe": cpe,
+                "reference": info.get("reference", []),
+            }
+            if tpl_id not in seen_template_ids:
+                security_matches.append(match_item)
+                seen_template_ids.add(tpl_id)
+
+            if severity in ("LOW", "MEDIUM", "HIGH", "CRITICAL") or cve_ids:
+                vuln_component = canon_tech or "Security Findings"
+                if vuln_component not in vulnerabilities:
+                    vulnerabilities[vuln_component] = []
+                cve_id_str = cve_ids[0] if cve_ids else tpl_id.upper()
+                cvss_score = classification.get("cvss-score")
+                if not cvss_score:
+                    scores = {"CRITICAL": 9.8, "HIGH": 7.5, "MEDIUM": 5.3, "LOW": 3.1}
+                    cvss_score = scores.get(severity, 5.0)
+
+                vulnerabilities[vuln_component].append({
+                    "id": cve_id_str,
+                    "severity": severity,
+                    "score": cvss_score,
+                    "description": desc or name,
+                    "confidence": "confirmed",
+                    "source": "scanner",
+                    "matched_at": matched_at,
+                })
+
+        return tech_stack, security_matches, vulnerabilities
+
+    except Exception:
+        return {}, [], {}
+    finally:
+        if out_file and os.path.exists(out_file):
+            try:
+                os.remove(out_file)
+            except Exception:
+                pass
+
+
+def scan_tech(url: str, enable_multi_path: bool = True) -> dict:
+    """Detect tech stack & exposures using official Nuclei engine + SSRF-safe request."""
     try:
         validate_target(url)
     except SSRFError as e:
@@ -279,28 +606,80 @@ def scan_tech(url: str) -> dict:
         resp = _safe_get(url, sess)
         hdrs = resp.headers
         html = resp.text
-        tech: dict[str, list[str]] = {}
 
-        # ── Header-based detection ──────────────────────────────────────────
+        tech: dict[str, list[str]] = {}
+        matches_payload: list[dict] = []
+        direct_vulnerabilities: dict[str, list[dict]] = {}
+
+        # ── 1. Official Nuclei Engine execution (if available) ─────────────
+        cli_tech, cli_matches, cli_vulns = {}, [], {}
+        if USE_NUCLEI_CLI:
+            cli_tech, cli_matches, cli_vulns = run_nuclei_cli(url, timeout=30)
+
+        if cli_matches or cli_tech:
+            tech.update(cli_tech)
+            matches_payload.extend(cli_matches)
+            direct_vulnerabilities.update(cli_vulns)
+        else:
+            # ── Fallback to Python in-memory engine ────────────────────────
+            template_matches = nuclei_engine.scan_response(
+                status_code=resp.status_code,
+                headers=dict(hdrs),
+                body=html,
+            )
+
+            if enable_multi_path:
+                exposure_templates = [
+                    t for t in nuclei_engine.templates
+                    if t.category in ("exposures", "misconfigurations")
+                ]
+                if exposure_templates:
+                    def _req(target_url: str):
+                        return _safe_get(target_url, sess, timeout=5)
+
+                    path_matches = nuclei_engine.scan_target(
+                        base_url=url,
+                        request_fn=_req,
+                        templates=exposure_templates,
+                        max_paths=12,
+                    )
+                    seen_ids = {m.template_id for m in template_matches}
+                    for pm in path_matches:
+                        if pm.template_id not in seen_ids:
+                            template_matches.append(pm)
+                            seen_ids.add(pm.template_id)
+
+            tech = nuclei_engine.to_tech_stack(template_matches)
+            matches_payload = [
+                {
+                    "template_id": m.template_id,
+                    "name":        m.name,
+                    "tech":        m.tech,
+                    "severity":    m.severity,
+                    "category":    m.category,
+                    "tags":        m.tags,
+                    "matched_at":  m.matched_at or url,
+                    "description": m.description,
+                    "version":     m.detected_version,
+                    "cpe":         m.cpe,
+                }
+                for m in template_matches
+            ]
+
+        # ── Header-based detection & Fallbacks ──────────────────────────────
         server = hdrs.get("Server") or hdrs.get("server", "")
-        if server:
+        if server and "Server" not in tech:
             tech["Server"] = [server]
 
         powered = hdrs.get("X-Powered-By") or hdrs.get("x-powered-by", "")
-        if powered:
+        if powered and "X-Powered-By" not in tech:
             tech["X-Powered-By"] = [powered]
 
         aspnet = hdrs.get("X-AspNet-Version", "")
-        if aspnet:
+        if aspnet and "ASP.NET" not in tech:
             tech["ASP.NET"] = [aspnet]
 
-        cookies = hdrs.get("Set-Cookie", "")
-        if "PHPSESSID" in cookies:
-            tech.setdefault("PHP", ["detected"])
-        if "ASP.NET_SessionId" in cookies or "ASPSESSIONID" in cookies:
-            tech.setdefault("ASP.NET", ["detected"])
-
-        # ── HTML parsing ────────────────────────────────────────────────────
+        # HTML parsing fallback for generator meta
         parser = _TechHTMLParser()
         try:
             parser.feed(html)
@@ -308,36 +687,16 @@ def scan_tech(url: str) -> dict:
             pass
 
         generator = parser.meta.get("generator", "")
-        if generator:
+        if generator and "Generator" not in tech:
             tech["Generator"] = [generator]
 
-        sources = " ".join(parser.scripts + parser.links) + " " + html[:50000]
-
-        PATTERNS = {
-            "jQuery":    r"jquery[./-]([\d.]+)",
-            "React":     r"react[./-]([\d.]+)|['\"]react['\"]",
-            "Vue":       r"vue[./-]([\d.]+)|Vue\.js",
-            "Angular":   r"angular[./-]([\d.]+)|@angular",
-            "Bootstrap": r"bootstrap[./-]([\d.]+)",
-            "WordPress": r"/wp-content/|/wp-includes/",
-            "Drupal":    r"Drupal\.settings|/sites/default/files",
-            "Joomla":    r"/media/jui/|Joomla!",
-            "Next.js":   r"/_next/static/|__NEXT_DATA__",
-            "Laravel":   r"laravel_session|Laravel",
-            "Django":    r"csrfmiddlewaretoken|django",
-            "Node.js":   r"Express|node\.js",
-        }
-
-        for name, pattern in PATTERNS.items():
-            m = re.search(pattern, sources, re.IGNORECASE)
-            if m:
-                version = m.group(1) if m.lastindex else "detected"
-                tech[name] = [version]
-
         return {
-            "target":     url,
-            "status":     resp.status_code,
-            "tech_stack": tech,
+            "target":                 url,
+            "status":                 resp.status_code,
+            "tech_stack":             tech,
+            "security_matches":       matches_payload,
+            "nuclei_matches":         matches_payload,
+            "direct_vulnerabilities": direct_vulnerabilities,
         }
 
     except SSRFError as e:
@@ -604,15 +963,30 @@ def build_summary(
     tech_stack: dict,
     vulnerabilities: dict,
     security_header_findings: list,
+    nuclei_findings: list | None = None,
 ) -> dict:
     """
     Compute overall_risk and top findings.
 
     Severity capping rule:
-      - 'confirmed' CVEs (CPE-matched) can push risk to High or Critical.
+      - 'confirmed' CVEs (CPE-matched) & verified Nuclei findings can push risk to High or Critical.
       - 'possible' CVEs (keyword fallback) cap the risk contribution at Medium.
     """
     all_findings = list(security_header_findings)
+
+    # Convert significant engine matches (exposures / misconfigs with severity > INFO) into confirmed findings
+    if nuclei_findings:
+        for nf in nuclei_findings:
+            sev = str(nf.get("severity", "INFO")).upper()
+            if sev in ("LOW", "MEDIUM", "HIGH", "CRITICAL"):
+                all_findings.append({
+                    "title":             f"[{sev}] {nf.get('name', nf.get('template_id', 'Security Finding'))}",
+                    "plain_explanation": nf.get("description", "Potential exposure or misconfiguration detected by template."),
+                    "severity":          sev,
+                    "confidence":        "confirmed",
+                    "recommended_fix":   f"Review endpoint ({nf.get('matched_at', 'target')}) and restrict public exposure.",
+                    "source":            "engine",
+                })
 
     for tech_key, cves in vulnerabilities.items():
         for cve in cves:
@@ -670,11 +1044,17 @@ def build_summary(
         1 for cves in vulnerabilities.values()
         for c in cves if not c.get("error")
     )
+    sec_count = len(nuclei_findings) if nuclei_findings else 0
+    checked_parts = [
+        f"Checked {tech_count} technolog{'ies' if tech_count != 1 else 'y'}",
+    ]
+    if sec_count > 0:
+        checked_parts.append(f"{sec_count} security check{'s' if sec_count != 1 else ''}")
+    checked_parts.append(f"{len(SECURITY_HEADERS)} security headers")
+
     checked_line = (
-        f"Checked {tech_count} technolog{'ies' if tech_count != 1 else 'y'}, "
-        f"{len(SECURITY_HEADERS)} security headers, "
-        f"and found {cve_count} potential CVE{'s' if cve_count != 1 else ''} "
-        f"from the NVD database."
+        f"{', '.join(checked_parts)}, and found {cve_count} potential CVE{'s' if cve_count != 1 else ''} "
+        f"from the vulnerability database."
     )
 
     return {

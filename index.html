@@ -1390,6 +1390,13 @@
         </div>
         <div id="vulnBody"></div>
 
+        <!-- Security & Exposure Checks -->
+        <div class="vuln-header" style="margin-top:2.5rem;">
+          <div class="vuln-title">Security &amp; Exposure Checks</div>
+          <div class="vuln-count" id="secChecksSummary"></div>
+        </div>
+        <div id="secChecksBody"></div>
+
       </div>
 
     </div><!-- /#results -->
@@ -1634,6 +1641,8 @@
       }
     }
 
+    const secMatches = data.security_checks || (data.tech_detected && data.tech_detected.security_matches) || [];
+
     // Stats strip
     const risk = summary.overall_risk || 'Unknown';
     const riskClass = { Low: 'ok', Medium: 'warn', High: 'danger', Critical: 'danger' }[risk] || '';
@@ -1651,13 +1660,17 @@
         <div class="stat-num ${totalCVEs > 0 ? 'warn' : 'ok'}">${totalCVEs}</div>
       </div>
       <div class="stat-cell">
+        <div class="stat-label">Security Checks</div>
+        <div class="stat-num ${secMatches.length > 0 ? 'ok' : ''}">${secMatches.length}</div>
+      </div>
+      <div class="stat-cell">
         <div class="stat-label">Missing Headers</div>
         <div class="stat-num ${secHdrs.length > 0 ? 'warn' : 'ok'}">${secHdrs.length}</div>
       </div>
     `;
 
-    renderSimpleView(summary, risk);
-    renderTechnicalView(techStack, techCount, headers, headerCount, vulns, totalCVEs, secHdrs);
+    renderSimpleView(summary, risk, techStack, secMatches);
+    renderTechnicalView(techStack, techCount, headers, headerCount, vulns, totalCVEs, secHdrs, secMatches);
 
     // Default to simple view on each new scan
     setView('simple');
@@ -1667,7 +1680,7 @@
   }
 
   /* ── Simple View ── */
-  function renderSimpleView(summary, risk) {
+  function renderSimpleView(summary, risk, techStack, secMatches) {
     // Risk banner
     const verdicts = {
       Low:      'Your site looks healthy — no critical issues were found.',
@@ -1685,8 +1698,22 @@
       </div>
     `;
 
-    // What we checked
-    $('checkedLine').textContent = summary.what_we_checked || '';
+    // What we checked + Tech Chips Preview
+    let checkedHtml = esc(summary.what_we_checked || '');
+    const techEntries = Object.entries(techStack || {});
+    if (techEntries.length > 0) {
+      checkedHtml += `
+        <div style="margin-top:0.75rem;display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+          <span style="font-size:0.75rem;color:var(--dim);font-weight:600;text-transform:uppercase;">Identified Stack:</span>
+          ${techEntries.map(([name, vals]) => {
+            const versions = Array.isArray(vals) ? vals : [vals];
+            const ver = versions.filter(v => v && v !== 'detected').join(', ');
+            return `<span class="tech-chip" style="font-size:0.75rem;padding:0.2rem 0.55rem;">${esc(name)}${ver ? `<span class="chip-ver">${esc(ver)}</span>` : ''}</span>`;
+          }).join('')}
+        </div>
+      `;
+    }
+    $('checkedLine').innerHTML = checkedHtml;
 
     // Findings
     const findings = summary.findings || [];
@@ -1723,7 +1750,7 @@
   }
 
   /* ── Technical View ── */
-  function renderTechnicalView(techStack, techCount, headers, headerCount, vulns, totalCVEs, secHdrs) {
+  function renderTechnicalView(techStack, techCount, headers, headerCount, vulns, totalCVEs, secHdrs, secMatches) {
     $('techCount').textContent = techCount ? `(${techCount})` : '';
     $('headerCount').textContent = headerCount ? `(${headerCount})` : '';
 
@@ -1816,6 +1843,33 @@
             </div>
           </div>`;
       }).join('');
+    }
+
+    // Security & Exposure Checks
+    const nMatches = secMatches || [];
+    $('secChecksSummary').textContent = `${nMatches.length} finding${nMatches.length !== 1 ? 's' : ''}`;
+    if (nMatches.length === 0) {
+      $('secChecksBody').innerHTML = '<div class="empty-state" style="padding:1.5rem">No configuration exposures or vulnerabilities detected</div>';
+    } else {
+      $('secChecksBody').innerHTML = `
+        <div style="margin-top:0.75rem;display:flex;flex-direction:column;gap:0.75rem;">
+          ${nMatches.map(m => {
+            const sev = (m.severity || 'INFO').toUpperCase();
+            return `
+              <div class="cve-card" style="padding:1rem;">
+                <div class="cve-card-header" style="margin-bottom:0.4rem;">
+                  <span class="cve-id" style="font-size:0.88rem;">${esc(m.name || m.template_id)}</span>
+                  <span class="sev-badge sev-${sev}">${sev}</span>
+                  <span class="conf-badge conf-confirmed">${esc(m.category || 'verified')}</span>
+                </div>
+                <div class="cve-desc" style="font-size:0.82rem;margin-bottom:0.5rem;color:var(--muted);">${esc(m.description || '')}</div>
+                <div style="font-size:0.75rem;color:var(--muted);display:flex;gap:1.2rem;flex-wrap:wrap;">
+                  <span><strong>Endpoint:</strong> <code>${esc(m.matched_at || '')}</code></span>
+                  ${m.version && m.version !== 'detected' ? `<span><strong>Version:</strong> ${esc(m.version)}</span>` : ''}
+                </div>
+              </div>`;
+          }).join('')}
+        </div>`;
     }
   }
 

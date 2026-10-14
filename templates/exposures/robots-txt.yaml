@@ -1,0 +1,33 @@
+id: robots-txt-disclosure
+info:
+  name: Robots.txt File Information Disclosure
+  author: ThreatLens
+  severity: INFO
+  description: Detects robots.txt which may enumerate sensitive administrative endpoints and private directories.
+  tags:
+    - exposure
+    - recon
+  metadata:
+    category: exposures
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/robots.txt"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: regex
+        part: body
+        regex:
+          - "(?i)user-agent:"
+          - "(?i)disallow:"
+        condition: or
+    extractors:
+      - type: regex
+        part: body
+        name: disallow_rules
+        regex:
+          - "(?i)Disallow:\\s*([^\\r\\n]+)"

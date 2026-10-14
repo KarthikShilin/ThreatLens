@@ -1,0 +1,29 @@
+id: drupal-detect
+info:
+  name: Drupal CMS
+  author: ThreatLens
+  severity: info
+  description: Detects presence of Drupal CMS and extracts version.
+  metadata:
+    tech: Drupal
+    cpe: cpe:2.3:a:drupal:drupal
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+    matchers-condition: or
+    matchers:
+      - type: regex
+        part: body
+        regex:
+          - "Drupal\\.settings"
+          - "/sites/default/files"
+          - "name=\"Generator\" content=\"Drupal ([\\d.]+)\""
+    extractors:
+      - type: regex
+        part: body
+        name: version
+        group: 1
+        regex:
+          - "name=\"Generator\" content=\"Drupal ([\\d.]+)\""

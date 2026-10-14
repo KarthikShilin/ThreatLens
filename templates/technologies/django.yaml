@@ -1,0 +1,32 @@
+id: django-detect
+info:
+  name: Django Framework
+  author: ThreatLens
+  severity: info
+  description: Detects Django via CSRF tokens or cookies.
+  metadata:
+    tech: Django
+    cpe: cpe:2.3:a:djangoproject:django
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+    matchers-condition: or
+    matchers:
+      - type: word
+        part: header.set-cookie
+        words:
+          - "csrftoken"
+      - type: regex
+        part: body
+        regex:
+          - "csrfmiddlewaretoken"
+          - "__admin_media_prefix__"
+    extractors:
+      - type: regex
+        part: body
+        name: version
+        group: 1
+        regex:
+          - "django[./-]([\\d.]+)"

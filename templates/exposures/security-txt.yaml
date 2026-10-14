@@ -1,0 +1,31 @@
+id: security-txt-detect
+info:
+  name: Security.txt Policy File Detection
+  author: ThreatLens
+  severity: INFO
+  description: Checks for RFC 9116 security.txt contact file for vulnerability reporting.
+  tags:
+    - compliance
+    - security-policy
+  metadata:
+    category: exposures
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/.well-known/security.txt"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        part: body
+        words:
+          - "Contact:"
+    extractors:
+      - type: regex
+        part: body
+        name: contact
+        regex:
+          - "(?i)Contact:\\s*([^\\r\\n]+)"

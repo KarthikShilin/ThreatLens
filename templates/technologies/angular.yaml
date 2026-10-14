@@ -1,0 +1,31 @@
+id: angular-detect
+info:
+  name: Angular Framework
+  author: ThreatLens
+  severity: info
+  description: Detects presence of Angular and extracts version.
+  metadata:
+    tech: Angular
+    cpe: cpe:2.3:a:google:angular.js
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+    matchers-condition: or
+    matchers:
+      - type: regex
+        part: body
+        regex:
+          - "angular[./-]([\\d.]+)"
+          - "@angular"
+          - "ng-version=\"([\\d.]+)\""
+          - "ng-app"
+    extractors:
+      - type: regex
+        part: body
+        name: version
+        group: 1
+        regex:
+          - "angular[./-]([\\d.]+)"
+          - "ng-version=\"([\\d.]+)\""

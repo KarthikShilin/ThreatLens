@@ -1,0 +1,30 @@
+id: react-detect
+info:
+  name: React Framework
+  author: ThreatLens
+  severity: info
+  description: Detects presence of React and extracts version if specified.
+  metadata:
+    tech: React
+    cpe: cpe:2.3:a:facebook:react
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+    matchers-condition: or
+    matchers:
+      - type: regex
+        part: body
+        regex:
+          - "react[./-]([\\d.]+)"
+          - "['\"]react['\"]"
+          - "_reactRootContainer"
+          - "data-reactroot"
+    extractors:
+      - type: regex
+        part: body
+        name: version
+        group: 1
+        regex:
+          - "react[./-]([\\d.]+)"

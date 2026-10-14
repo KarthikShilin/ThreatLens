@@ -5,4 +5,6 @@ __pycache__/
 *.pdf
 .venv/
 venv/
+bin/
+*.exe
 index_original.html

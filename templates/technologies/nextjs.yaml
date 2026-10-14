@@ -1,0 +1,30 @@
+id: nextjs-detect
+info:
+  name: Next.js Framework
+  author: ThreatLens
+  severity: info
+  description: Detects Next.js framework in script tags and page data.
+  metadata:
+    tech: Next.js
+    cpe: cpe:2.3:a:vercel:next.js
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+    matchers-condition: or
+    matchers:
+      - type: regex
+        part: body
+        regex:
+          - "/_next/static/"
+          - "__NEXT_DATA__"
+          - "next/dist/client"
+    extractors:
+      - type: regex
+        part: body
+        name: version
+        group: 1
+        regex:
+          - "next[./-]([\\d.]+)"
+          - "\"buildId\":\"([^\"]+)\""

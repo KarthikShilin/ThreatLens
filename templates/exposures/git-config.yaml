@@ -1,0 +1,28 @@
+id: git-config-exposure
+info:
+  name: Git Configuration Exposure
+  author: ThreatLens
+  severity: HIGH
+  description: Detects an exposed .git/config file which can leak repository remotes, commit history, and source code.
+  tags:
+    - exposure
+    - git
+    - vcs
+  metadata:
+    category: exposures
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/.git/config"
+    matchers-condition: and
+    matchers:
+      - type: status
+        status:
+          - 200
+      - type: word
+        part: body
+        words:
+          - "[core]"
+          - "repositoryformatversion"
+        condition: and

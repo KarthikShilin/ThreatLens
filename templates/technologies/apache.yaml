@@ -1,0 +1,27 @@
+id: apache-detect
+info:
+  name: Apache HTTP Server
+  author: ThreatLens
+  severity: info
+  description: Detects Apache HTTP Server and extracts version.
+  metadata:
+    tech: Apache
+    cpe: cpe:2.3:a:apache:http_server
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+    matchers-condition: or
+    matchers:
+      - type: regex
+        part: header.server
+        regex:
+          - "Apache"
+    extractors:
+      - type: regex
+        part: header.server
+        name: version
+        group: 1
+        regex:
+          - "Apache/([\\d.]+)"

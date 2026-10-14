@@ -1,0 +1,31 @@
+id: nodejs-detect
+info:
+  name: Node.js / Express
+  author: ThreatLens
+  severity: info
+  description: Detects Node.js / Express runtime.
+  metadata:
+    tech: Node.js
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+    matchers-condition: or
+    matchers:
+      - type: word
+        part: header.x-powered-by
+        words:
+          - "Express"
+      - type: regex
+        part: body
+        regex:
+          - "Express"
+          - "node\\.js"
+    extractors:
+      - type: regex
+        part: body
+        name: version
+        group: 1
+        regex:
+          - "node[./-]([\\d.]+)"
