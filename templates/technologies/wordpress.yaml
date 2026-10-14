@@ -27,4 +27,4 @@ http:
         group: 1
         regex:
           - "name=\"generator\" content=\"WordPress ([\\d.]+)\""
-          - "ver=([\\d.]+)"
+          - "/wp-includes/js/wp-embed\\.min\\.js\\?ver=([\\d.]+)"

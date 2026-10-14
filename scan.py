@@ -297,7 +297,9 @@ NUCLEI_BIN_PATH = os.environ.get(
 )
 COMMUNITY_TEMPLATES_DIR = os.environ.get(
     "NUCLEI_TEMPLATES_DIR",
-    os.path.expanduser("~/nuclei-templates"),
+    os.path.join(BASE_DIR, "nuclei-templates")
+    if os.path.isdir(os.path.join(BASE_DIR, "nuclei-templates"))
+    else os.path.expanduser("~/nuclei-templates"),
 )
 USE_NUCLEI_CLI = os.environ.get("USE_NUCLEI_CLI", "true").lower() in ("true", "1", "yes")
 
@@ -379,19 +381,29 @@ def run_nuclei_cli(url: str, timeout: int = 35) -> tuple[dict, list, dict]:
     if not bin_path or not os.path.exists(bin_path):
         return {}, [], {}
 
+    templates_dir = COMMUNITY_TEMPLATES_DIR
+    if not os.path.isdir(templates_dir):
+        for candidate in [
+            os.path.join(BASE_DIR, "nuclei-templates"),
+            os.path.expanduser("~/nuclei-templates"),
+        ]:
+            if os.path.isdir(candidate):
+                templates_dir = candidate
+                break
+
     phase1_dirs: list[str] = []
-    if os.path.isdir(COMMUNITY_TEMPLATES_DIR):
+    if os.path.isdir(templates_dir):
         for sub in ["http/technologies", "ssl"]:
-            full_sub = os.path.join(COMMUNITY_TEMPLATES_DIR, sub)
+            full_sub = os.path.join(templates_dir, sub)
             if os.path.exists(full_sub):
                 phase1_dirs.append(full_sub)
     if os.path.isdir(TEMPLATES_DIR):
         phase1_dirs.append(TEMPLATES_DIR)
 
     phase2_dirs: list[str] = []
-    if os.path.isdir(COMMUNITY_TEMPLATES_DIR):
+    if os.path.isdir(templates_dir):
         for sub in ["http/misconfiguration", "http/exposures", "http/vulnerabilities", "http/default-logins"]:
-            full_sub = os.path.join(COMMUNITY_TEMPLATES_DIR, sub)
+            full_sub = os.path.join(templates_dir, sub)
             if os.path.exists(full_sub):
                 phase2_dirs.append(full_sub)
 

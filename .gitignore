@@ -7,4 +7,5 @@ __pycache__/
 venv/
 bin/
 *.exe
+nuclei-templates/
 index_original.html

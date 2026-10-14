@@ -91,7 +91,11 @@ class NucleiEngine:
         """
         stack: dict[str, list[str]] = {}
         for r in results:
+            if r.category in ("exposures", "misconfigurations", "vulnerabilities"):
+                continue
             tech_name = r.tech
+            if any(term in tech_name.lower() for term in ("policy", "file disclosure", "directory listing", "robot", "swagger", "detection")):
+                continue
             version = r.detected_version
             if tech_name not in stack:
                 stack[tech_name] = [version]
