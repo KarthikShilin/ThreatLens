@@ -21,6 +21,9 @@ http:
           - "['\"]react['\"]"
           - "_reactRootContainer"
           - "data-reactroot"
+          - "react\\.development\\.js"
+          - "react\\.production\\.min\\.js"
+          - "react-dom"
     extractors:
       - type: regex
         part: body
@@ -28,3 +31,4 @@ http:
         group: 1
         regex:
           - "react[./-]([\\d.]+)"
+          - "React v([\\d.]+)"

@@ -6,7 +6,7 @@ info:
   description: Detects presence of Angular and extracts version.
   metadata:
     tech: Angular
-    cpe: cpe:2.3:a:google:angular.js
+    cpe: cpe:2.3:a:angularjs:angular.js
 
 http:
   - method: GET
@@ -17,7 +17,7 @@ http:
       - type: regex
         part: body
         regex:
-          - "angular[./-]([\\d.]+)"
+          - "angular[._/-]([\\d]+(?:[._-][\\d]+)*)"
           - "@angular"
           - "ng-version=\"([\\d.]+)\""
           - "ng-app"
@@ -27,5 +27,5 @@ http:
         name: version
         group: 1
         regex:
-          - "angular[./-]([\\d.]+)"
+          - "angular[._/-]([\\d]+(?:[._-][\\d]+)*)"
           - "ng-version=\"([\\d.]+)\""

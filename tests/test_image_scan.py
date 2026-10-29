@@ -883,3 +883,28 @@ class TestQRCodeDetection:
         # Quad with wildly non-square aspect ratio (0.2)
         narrow_pts = np.array([[100, 100], [120, 100], [120, 400], [100, 400]], dtype=np.float32)
         assert _is_valid_qr_quad(narrow_pts, (500, 500), gray) is False
+
+    def test_qr_detection_scale_invariance(self):
+        """QR code in a high-resolution scene must be detected regardless of image resolution."""
+        import base64
+        import cv2
+        import numpy as np
+        from image_scan import _detect_qr, _is_valid_qr_quad
+
+        raw = base64.b64decode(_SAMPLE_QR_PNG_B64)
+        qr_img = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
+
+        # Large scene (800x800) with QR code placed inside
+        scene = np.ones((800, 800, 3), dtype=np.uint8) * 240
+        qr_resized = cv2.resize(qr_img, (200, 200), interpolation=cv2.INTER_NEAREST)
+        scene[100:300, 400:600] = qr_resized
+
+        dets = _detect_qr(scene)
+        assert len(dets) >= 1
+        assert dets[0].kind == "qr"
+
+        # Validate that _is_valid_qr_quad accepts the large quad
+        gray = cv2.cvtColor(scene, cv2.COLOR_BGR2GRAY)
+        quad = np.array([[400, 100], [600, 100], [600, 300], [400, 300]], dtype=np.float32)
+        assert _is_valid_qr_quad(quad, (800, 800), gray) is True
+

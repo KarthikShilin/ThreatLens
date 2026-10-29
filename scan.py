@@ -80,13 +80,23 @@ def _is_generic_server_value(value: str) -> bool:
     return False
 
 
+def _normalize_version(version: str) -> str:
+    """Normalize version strings: convert hyphens and underscores to dots.
+
+    Examples: '1-7-7' → '1.7.7', '1_7_7' → '1.7.7', '1.7.7' unchanged.
+    """
+    if version in ("detected", ""):
+        return version
+    return version.replace("-", ".").replace("_", ".")
+
+
 # ── CPE prefix table for known products ───────────────────────────────────────
 # Used to perform accurate NVD CPE queries instead of free-text keyword search.
 # Keys must match the tech names emitted by scan_tech().
 CPE_PREFIX = {
     "jQuery":    "cpe:2.3:a:jquery:jquery",
     "Bootstrap": "cpe:2.3:a:getbootstrap:bootstrap",
-    "Angular":   "cpe:2.3:a:google:angular.js",
+    "Angular":   "cpe:2.3:a:angularjs:angular.js",
     "Vue":       "cpe:2.3:a:vuejs:vue.js",
     "React":     "cpe:2.3:a:facebook:react",
     "WordPress": "cpe:2.3:a:wordpress:wordpress",
@@ -628,42 +638,58 @@ def scan_tech(url: str, enable_multi_path: bool = True) -> dict:
         if USE_NUCLEI_CLI:
             cli_tech, cli_matches, cli_vulns = run_nuclei_cli(url, timeout=30)
 
-        if cli_matches or cli_tech:
+        if cli_tech:
             tech.update(cli_tech)
+        if cli_matches:
             matches_payload.extend(cli_matches)
+        if cli_vulns:
             direct_vulnerabilities.update(cli_vulns)
-        else:
-            # ── Fallback to Python in-memory engine ────────────────────────
-            template_matches = nuclei_engine.scan_response(
-                status_code=resp.status_code,
-                headers=dict(hdrs),
-                body=html,
-            )
 
-            if enable_multi_path:
-                exposure_templates = [
-                    t for t in nuclei_engine.templates
-                    if t.category in ("exposures", "misconfigurations")
-                ]
-                if exposure_templates:
-                    def _req(target_url: str):
-                        return _safe_get(target_url, sess, timeout=5)
+        # ── 2. Always run Python in-memory engine to supplement CLI ────────
+        # The CLI may miss detections that the Python regex engine catches
+        # (e.g. version formats or patterns the CLI templates don't handle).
+        template_matches = nuclei_engine.scan_response(
+            status_code=resp.status_code,
+            headers=dict(hdrs),
+            body=html,
+        )
 
-                    path_matches = nuclei_engine.scan_target(
-                        base_url=url,
-                        request_fn=_req,
-                        templates=exposure_templates,
-                        max_paths=12,
-                    )
-                    seen_ids = {m.template_id for m in template_matches}
-                    for pm in path_matches:
-                        if pm.template_id not in seen_ids:
-                            template_matches.append(pm)
-                            seen_ids.add(pm.template_id)
+        if enable_multi_path and not (cli_matches or cli_tech):
+            # Only run multi-path from Python if CLI didn't execute
+            # (CLI already handles exposure/misconfig paths in phase 2)
+            exposure_templates = [
+                t for t in nuclei_engine.templates
+                if t.category in ("exposures", "misconfigurations")
+            ]
+            if exposure_templates:
+                def _req(target_url: str):
+                    return _safe_get(target_url, sess, timeout=5)
 
-            tech = nuclei_engine.to_tech_stack(template_matches)
-            matches_payload = [
-                {
+                path_matches = nuclei_engine.scan_target(
+                    base_url=url,
+                    request_fn=_req,
+                    templates=exposure_templates,
+                    max_paths=12,
+                )
+                seen_ids = {m.template_id for m in template_matches}
+                for pm in path_matches:
+                    if pm.template_id not in seen_ids:
+                        template_matches.append(pm)
+                        seen_ids.add(pm.template_id)
+
+        # Merge Python engine tech detections (prefer versioned over "detected")
+        py_tech = nuclei_engine.to_tech_stack(template_matches)
+        for k, v in py_tech.items():
+            if k not in tech:
+                tech[k] = v
+            elif tech[k] == ["detected"] and v != ["detected"]:
+                tech[k] = v
+
+        # Merge Python engine matches (deduplicate by template_id)
+        seen_tpl_ids = {m.get("template_id") for m in matches_payload}
+        for m in template_matches:
+            if m.template_id not in seen_tpl_ids:
+                matches_payload.append({
                     "template_id": m.template_id,
                     "name":        m.name,
                     "tech":        m.tech,
@@ -674,9 +700,12 @@ def scan_tech(url: str, enable_multi_path: bool = True) -> dict:
                     "description": m.description,
                     "version":     m.detected_version,
                     "cpe":         m.cpe,
-                }
-                for m in template_matches
-            ]
+                })
+                seen_tpl_ids.add(m.template_id)
+
+        # Normalize all version strings (e.g. "1-7-7" → "1.7.7")
+        for k in tech:
+            tech[k] = [_normalize_version(v) for v in tech[k]]
 
         # ── Header-based detection & Fallbacks ──────────────────────────────
         server = hdrs.get("Server") or hdrs.get("server", "")
@@ -868,6 +897,8 @@ def map_vulnerabilities(tech_stack: dict, max_workers: int = 6) -> dict:
     """
 
     def _lookup(tech_name: str, version: str) -> tuple[str, list]:
+        # Normalize version (e.g. "1-7-7" → "1.7.7") for accurate CVE lookup
+        version = _normalize_version(version)
         has_version = version not in ("detected", "")
         label = f"{tech_name} {version}".strip() if has_version else tech_name
 
